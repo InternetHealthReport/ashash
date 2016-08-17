@@ -113,7 +113,7 @@ def computeSimhash(rtreedict):
     for asn, problist in asProb.iteritems():
         asAggProb[asn] = np.mean(problist)
 
-    return simhash.Simhash(asAggProb f=512, hashfunc=hashfunc)
+    return simhash.Simhash(asAggProb, f=512, hashfunc=hashfunc)
 
 
 if __name__ == "__main__":
