@@ -24,6 +24,10 @@ def readrib(files):
 
         if rtreedict.has_key(zOrig) is False:
             rtreedict[zOrig] = radix.Radix()
+            root = rtreedict[zOrig].add("0.0.0.0/0")
+            root.data["nbPrefix"] = 0
+            root.data["asCount"] = defaultdict(int)
+
 
         root = rtreedict[zOrig].search_exact("0.0.0.0/0")
         node = rtreedict[zOrig].add(zPfx)
@@ -49,6 +53,9 @@ def readupdates(filename, rtreedict = {}):
         
         if rtreedict.has_key(zOrig) is False:
             rtreedict[zOrig] = radix.Radix()
+            root = rtreedict[zOrig].add("0.0.0.0/0")
+            root.data["nbPrefix"] = 0
+            root.data["asCount"] = defaultdict(int)
 
         root = rtreedict[zOrig].search_exact("0.0.0.0/0")
        
