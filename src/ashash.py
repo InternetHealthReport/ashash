@@ -7,6 +7,7 @@ import numpy as np
 import simhash
 import matplotlib.pylab as plt
 import hashlib
+import cPickle as pickle
 
 def readrib(files):
     
@@ -23,8 +24,13 @@ def readrib(files):
 
         if rtreedict.has_key(zOrig) is False:
             rtreedict[zOrig] = radix.Radix()
+
+        root = rtreedict[zOrig].search_exact("0.0.0.0/0")
         node = rtreedict[zOrig].add(zPfx)
         node.data["path"] = set(sPath.split(" "))
+        root.data["nbPrefix"] += 1
+        for asn in node.data["path"]:
+            root.data["asCount"][asn] += 1
     
     return rtreedict
 
@@ -43,23 +49,36 @@ def readupdates(filename, rtreedict = {}):
         
         if rtreedict.has_key(zOrig) is False:
             rtreedict[zOrig] = radix.Radix()
+
+        root = rtreedict[zOrig].search_exact("0.0.0.0/0")
        
         if res[2] == "W":
-            rtreedict[zOrig].delete(res[5])
+            node = rtreedict[zOrig].search_exact(res[5])
+            if not node is None:
+                root.data["nbPrefix"] -= 1
+                for asn in node.data["path"]:
+                    root.data["asCount"][asn] -= 1
+                rtreedict[zOrig].delete(res[5])
         
         else:
             zTd, zDt, zS, zOrig, zAS, zPfx, sPath, zPro, zOr, z0, z1, z2, z3, z4, z5 = res
             node = rtreedict[zOrig].search_exact(zPfx)
             path_list = sPath.split(' ')
             origin_as = path_list[-1]
-            
 
             if node is None:
                 node = rtreedict[zOrig].add(zPfx)
                 node.data["path"] = set(sPath.split(" "))
+                root.data["nbPrefix"] += 1
+                for asn in node.data["path"]:
+                    root.data["asCount"][asn] += 1
 
             else:
+                for asn in node.data["path"]:
+                    root.data["asCount"][asn] -= 1
                 node.data["path"] = set(sPath.split(" "))
+                for asn in node.data["path"]:
+                    root.data["asCount"][asn] += 1
 
     return rtreedict
 
@@ -74,14 +93,18 @@ def computeSimhash(rtreedict):
 
     # For each RIB from our peers
     for rtree in rtreedict.values():
-        asCount = defaultdict(int)
+        root = rtree.search_exact("0.0.0.0/0")
+        asCount = root.data["asCount"]
+        nbPrefix = root.data["nbPrefix"]
 
-        nbPrefix = 0
-        for node in rtree:
-            for asn in node.data["path"]:
-                asCount[asn] += 1
+        # asCount = defaultdict(int)
 
-            nbPrefix += 1
+        # nbPrefix = 0
+        # for node in rtree:
+            # for asn in node.data["path"]:
+                # asCount[asn] += 1
+
+            # nbPrefix += 1
 
         for asn, count in asCount.iteritems():
             asProb[asn].append(count/float(nbPrefix))
@@ -90,7 +113,7 @@ def computeSimhash(rtreedict):
     for asn, problist in asProb.iteritems():
         asAggProb[asn] = np.mean(problist)
 
-    return simhash.Simhash(asAggProb,f=128) # f=256, hashfunc=hashfunc)
+    return simhash.Simhash(asAggProb f=512, hashfunc=hashfunc)
 
 
 if __name__ == "__main__":
@@ -149,4 +172,6 @@ if __name__ == "__main__":
     plt.plot(hashHistory["distance"])
     plt.tight_layout()
     plt.savefig("test.eps")
+
+    pickle.dump(hashHistory, open("hashHistory.pickle", "w"))
 
