@@ -97,12 +97,13 @@ def hashfunc(x):
 def computeSimhash(rtreedict):
 
     asProb = defaultdict(list)
-
+    nbPrefixList = []
     # For each RIB from our peers
     for rtree in rtreedict.values():
         root = rtree.search_exact("0.0.0.0/0")
         asCount = root.data["asCount"]
         nbPrefix = root.data["nbPrefix"]
+        nbPrefixList.append(nbPrefix)
 
         # asCount = defaultdict(int)
 
@@ -121,6 +122,11 @@ def computeSimhash(rtreedict):
         mu = np.mean(problist)
         if mu > 0.0001:
             asAggProb[asn] = mu
+
+    print "\t%s peers" % len(rtreedict)
+    print "\t%s prefixes per peers" % np.mean(nbPrefixList)
+    print "\tTotal number of ASN: %s" % len(asProb)
+    print "\tNumber of ASN kept for the hash: %s" % len(asAggProb)
 
     return simhash.Simhash(asAggProb, f=128) # f=512, hashfunc=hashfunc)
 
