@@ -28,7 +28,7 @@ def readrib(files):
             root.data[zOrig] = {"nbPrefix": 0, "asCount": defaultdict(int)}
 
         node = rtree.add(zPfx)
-        node.data[zOrig]["path"] = set(sPath.split(" "))
+        node.data[zOrig] = {"path": set(sPath.split(" ")), "asCount": defaultdict(int)}
         root.data[zOrig]["nbPrefix"] += 1
         for asn in node.data["path"]:
             root.data[zOrig]["asCount"][asn] += 1
@@ -72,7 +72,7 @@ def readupdates(filename, rtree):
 
             if node is None or not zOrig in node.data:
                 node = rtree.add(zPfx)
-                node.data[zOrig]["path"] = set(sPath.split(" "))
+                node.data[zOrig] = {"path": set(sPath.split(" ")), "asCount": defaultdict(int)}
                 root.data[zOrig]["nbPrefix"] += 1
                 for asn in node.data[zOrig]["path"]:
                     root.data[zOrig]["asCount"][asn] += 1
