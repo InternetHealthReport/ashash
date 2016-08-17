@@ -118,9 +118,11 @@ def computeSimhash(rtreedict):
 
     asAggProb = {}
     for asn, problist in asProb.iteritems():
-        asAggProb[asn] = np.mean(problist)
+        mu = np.mean(problist)
+        if mu > 0.0001:
+            asAggProb[asn] = mu
 
-    return simhash.Simhash(asAggProb, f=512, hashfunc=hashfunc)
+    return simhash.Simhash(asAggProb, f=128) # f=512, hashfunc=hashfunc)
 
 
 if __name__ == "__main__":
@@ -179,6 +181,4 @@ if __name__ == "__main__":
     plt.plot(hashHistory["distance"])
     plt.tight_layout()
     plt.savefig("test.eps")
-
-    pickle.dump(hashHistory, open("hashHistory.pickle", "w"))
 
