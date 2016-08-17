@@ -98,12 +98,12 @@ def computeSimhash(rtree):
     nbPrefixList = []
     # For each RIB from our peers
     for peer, count in root.data.iteritems():
-        asCount = count["asCount"]
         nbPrefix = count["nbPrefix"]
-        nbPrefixList.append(nbPrefix)
-
-        if nbPrefix <= 0:
+        if nbPrefix <= 400000:
             continue
+
+        asCount = count["asCount"]
+        nbPrefixList.append(nbPrefix)
 
         # asCount = defaultdict(int)
 
@@ -119,16 +119,22 @@ def computeSimhash(rtree):
 
     asAggProb = {}
     for asn, problist in asProb.iteritems():
-        mu = np.mean(problist)
-        if mu > 0.0001:
-            asAggProb[asn] = mu
+        mu = np.median(problist)
+        if asn == "4788" or asn == "200759" or asn == "65021":
+            print "%s: %s" % (asn, mu)
+        #if mu > 0.00001:
+        asAggProb[asn] = mu
 
-    print "\t%s peers" % len(root.data)
+    #print asAggProb
+
+    print "\t%s/%s peers" % (len(nbPrefixList), len(root.data))
+    #nbp = [v["nbPrefix"] for  v in root.data.values()]
+    #print "\t%s" % nbp
     print "\t%s prefixes per peers" % np.mean(nbPrefixList)
     print "\tTotal number of ASN: %s" % len(asProb)
     print "\tNumber of ASN kept for the hash: %s" % len(asAggProb)
 
-    return simhash.Simhash(asAggProb, f=128) # f=512, hashfunc=hashfunc)
+    return simhash.Simhash(asAggProb, f=512, hashfunc=hashfunc)
 
 
 if __name__ == "__main__":
