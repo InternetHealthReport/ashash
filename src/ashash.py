@@ -69,6 +69,10 @@ def readupdates(filename, rtreedict = {}):
         
         else:
             zTd, zDt, zS, zOrig, zAS, zPfx, sPath, zPro, zOr, z0, z1, z2, z3, z4, z5 = res
+
+            if zPfx == "0.0.0.0/0":
+                continue
+
             node = rtreedict[zOrig].search_exact(zPfx)
             path_list = sPath.split(' ')
             origin_as = path_list[-1]
