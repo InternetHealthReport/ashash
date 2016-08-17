@@ -30,7 +30,7 @@ def readrib(files):
         node = rtree.add(zPfx)
         node.data[zOrig] = {"path": set(sPath.split(" ")), "asCount": defaultdict(int)}
         root.data[zOrig]["nbPrefix"] += 1
-        for asn in node.data["path"]:
+        for asn in node.data[zOrig]["path"]:
             root.data[zOrig]["asCount"][asn] += 1
     
     return rtree
