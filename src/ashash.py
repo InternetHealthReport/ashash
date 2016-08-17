@@ -11,61 +11,55 @@ import cPickle as pickle
 
 def readrib(files):
     
-    rtreedict = {}
+    rtree = radix.Radix() 
+    root = rtree.add("0.0.0.0/0")
+
     p0 = Popen(["bzcat"]+files, stdout=PIPE, bufsize=-1)
     p1 = Popen(["bgpdump", "-m", "-v", "-t", "change", "-"], stdin=p0.stdout, stdout=PIPE, bufsize=-1)
 
     for line in p1.stdout: 
-        res = line.split('|',15)
+        res = line.split('|',16)
         zTd, zDt, zS, zOrig, zAS, zPfx, sPath, zPro, zOr, z0, z1, z2, z3, z4, z5 = res
         
         if zPfx == "0.0.0.0/0":
             continue
 
-        if rtreedict.has_key(zOrig) is False:
-            rtreedict[zOrig] = radix.Radix()
-            root = rtreedict[zOrig].add("0.0.0.0/0")
-            root.data["nbPrefix"] = 0
-            root.data["asCount"] = defaultdict(int)
+        if not zOrig in root.data:
+            root.data[zOrig] = {"nbPrefix": 0, "asCount": defaultdict(int)}
 
-
-        root = rtreedict[zOrig].search_exact("0.0.0.0/0")
-        node = rtreedict[zOrig].add(zPfx)
-        node.data["path"] = set(sPath.split(" "))
-        root.data["nbPrefix"] += 1
+        node = rtree.add(zPfx)
+        node.data[zOrig]["path"] = set(sPath.split(" "))
+        root.data[zOrig]["nbPrefix"] += 1
         for asn in node.data["path"]:
-            root.data["asCount"][asn] += 1
+            root.data[zOrig]["asCount"][asn] += 1
     
-    return rtreedict
+    return rtree
 
 
-def readupdates(filename, rtreedict = {}):
+def readupdates(filename, rtree):
 
     p0 = Popen(["bzcat", filename], stdout=PIPE, bufsize=-1)
     p1 = Popen(["bgpdump", "-m", "-v", "-"], stdin=p0.stdout, stdout=PIPE, bufsize=-1)
     update_tag=""
     
+    root = rtree.search_exact("0.0.0.0/0")
     
     for line in p1.stdout:
         line=line.rstrip("\n")
         res = line.split('|',15)
         zOrig = res[3]
         
-        if rtreedict.has_key(zOrig) is False:
-            rtreedict[zOrig] = radix.Radix()
-            root = rtreedict[zOrig].add("0.0.0.0/0")
-            root.data["nbPrefix"] = 0
-            root.data["asCount"] = defaultdict(int)
+        if not zOrig in root.data:
+            root.data[zOrig] = {"nbPrefix": 0, "asCount": defaultdict(int)}
 
-        root = rtreedict[zOrig].search_exact("0.0.0.0/0")
        
         if res[2] == "W":
-            node = rtreedict[zOrig].search_exact(res[5])
+            node = rtree.search_exact(res[5])
             if not node is None:
-                root.data["nbPrefix"] -= 1
-                for asn in node.data["path"]:
-                    root.data["asCount"][asn] -= 1
-                rtreedict[zOrig].delete(res[5])
+                root.data[zOrig]["nbPrefix"] -= 1
+                for asn in node.data[zOrig]["path"]:
+                    root.data[zOrig]["asCount"][asn] -= 1
+                node.data[zOrig]["path"] = []
         
         else:
             zTd, zDt, zS, zOrig, zAS, zPfx, sPath, zPro, zOr, z0, z1, z2, z3, z4, z5 = res
@@ -73,41 +67,43 @@ def readupdates(filename, rtreedict = {}):
             if zPfx == "0.0.0.0/0":
                 continue
 
-            node = rtreedict[zOrig].search_exact(zPfx)
+            node = rtree.search_exact(zPfx)
             path_list = sPath.split(' ')
-            origin_as = path_list[-1]
 
-            if node is None:
-                node = rtreedict[zOrig].add(zPfx)
-                node.data["path"] = set(sPath.split(" "))
-                root.data["nbPrefix"] += 1
-                for asn in node.data["path"]:
-                    root.data["asCount"][asn] += 1
+            if node is None or not zOrig in node.data:
+                node = rtree.add(zPfx)
+                node.data[zOrig]["path"] = set(sPath.split(" "))
+                root.data[zOrig]["nbPrefix"] += 1
+                for asn in node.data[zOrig]["path"]:
+                    root.data[zOrig]["asCount"][asn] += 1
 
             else:
-                for asn in node.data["path"]:
-                    root.data["asCount"][asn] -= 1
-                node.data["path"] = set(sPath.split(" "))
-                for asn in node.data["path"]:
-                    root.data["asCount"][asn] += 1
+                for asn in node.data[zOrig]["path"]:
+                    root.data[zOrig]["asCount"][asn] -= 1
+                node.data[zOrig]["path"] = set(sPath.split(" "))
+                for asn in node.data[zOrig]["path"]:
+                    root.data[zOrig]["asCount"][asn] += 1
 
-    return rtreedict
+    return rtree
 
 
 def hashfunc(x):
     return int(hashlib.sha512(x).hexdigest(), 16)
 
 
-def computeSimhash(rtreedict):
+def computeSimhash(rtree):
 
+    root = rtree.search_exact("0.0.0.0/0")
     asProb = defaultdict(list)
     nbPrefixList = []
     # For each RIB from our peers
-    for rtree in rtreedict.values():
-        root = rtree.search_exact("0.0.0.0/0")
-        asCount = root.data["asCount"]
-        nbPrefix = root.data["nbPrefix"]
+    for peer, count in root.data.iteritems():
+        asCount = count["asCount"]
+        nbPrefix = count["nbPrefix"]
         nbPrefixList.append(nbPrefix)
+
+        if nbPrefix <= 0:
+            continue
 
         # asCount = defaultdict(int)
 
@@ -118,8 +114,8 @@ def computeSimhash(rtreedict):
 
             # nbPrefix += 1
 
-        for asn, count in asCount.iteritems():
-            asProb[asn].append(count/float(nbPrefix))
+        for asn, nbPath in asCount.iteritems():
+            asProb[asn].append(nbPath/float(nbPrefix))
 
     asAggProb = {}
     for asn, problist in asProb.iteritems():
@@ -127,7 +123,7 @@ def computeSimhash(rtreedict):
         if mu > 0.0001:
             asAggProb[asn] = mu
 
-    print "\t%s peers" % len(rtreedict)
+    print "\t%s peers" % len(root.data)
     print "\t%s prefixes per peers" % np.mean(nbPrefixList)
     print "\tTotal number of ASN: %s" % len(asProb)
     print "\tNumber of ASN kept for the hash: %s" % len(asAggProb)
@@ -152,7 +148,7 @@ if __name__ == "__main__":
         sys.exit()
 
     rib_files.sort()
-    rtreedict = readrib(rib_files)
+    rtree = readrib(rib_files)
     arguments.pop(0)
 
     hashHistory = {"date":[], "hash":[], "distance":[]}
@@ -168,8 +164,8 @@ if __name__ == "__main__":
         update_files.sort()
 
         for fi in update_files:
-            rtreedict = readupdates(fi, rtreedict)
-            currHash = computeSimhash(rtreedict)
+            rtree = readupdates(fi, rtree)
+            currHash = computeSimhash(rtree)
 
             if not prevHash is None:
                 #TODO put the following outside of the loop 
