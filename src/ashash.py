@@ -96,7 +96,7 @@ def readupdates(filename, rtree):
 def hashfunc(x):
     return int(hashlib.sha512(x).hexdigest(), 16)
 
-def sketchsSimhash(sketches):
+def sketchesSimhash(sketches):
 
     hashes = {}
     for sketch, asProb in sketches.iteritems():
@@ -110,15 +110,15 @@ def sketchSet():
 def sketching(asProb, pool, N=6, M=16):
 
     seeds = [2**i for i in range(N)]
-    sketchs = defaultdict(sketchSet) 
+    sketches = defaultdict(sketchSet) 
     for seed in seeds:
         for asn, prob in asProb.iteritems():
-            sketchs[seed][mmh3.hash128(asn,seed=seed)%M][asn] = prob
+            sketches[seed][mmh3.hash128(asn,seed=seed)%M][asn] = prob
 
     # compute the simhash for each hash function
-    hashes= pool.map(sketchsSimhash, sketchs.itervalues())
+    hashes= pool.map(sketchesSimhash, sketches.itervalues())
 
-    return dict(zip(sketchs.keys(), hashes))
+    return dict(zip(sketches.keys(), hashes)), sketches
 
 
 def computeSimhash(rtree, pool):
@@ -168,14 +168,16 @@ def computeSimhash(rtree, pool):
     return sketching(asAggProb, pool)
     # return simhash.Simhash(asAggProb, f=512, hashfunc=hashfunc)
 
-def compareSimhash(prevHash, currHash):
+def compareSimhash(prevHash, curHash, sketches,  distThresh=3, minVotes=5):
     distance = 0
-
+    votes = defaultdict(int)
     for seed, sketchSet in prevHash.iteritems():
         for m, prevHash in sketchSet.iteritems():
-            distance += prevHash.distance(currHash[seed][m])
+            if prevHash.distance(currHash[seed][m]) > distThresh:
+                for asn in sketches[seed][m].keys():
+                    votes[asn]+=1
 
-    return distance
+    return [asn for asn, count in votes.iteritems() if count >= minVotes] 
 
 if __name__ == "__main__":
 	
@@ -212,10 +214,10 @@ if __name__ == "__main__":
 
         for fi in update_files:
             rtree = readupdates(fi, rtree)
-            currHash = computeSimhash(rtree, p)
+            currHash, sketches = computeSimhash(rtree, p)
 
             if not prevHash is None:
-                distance = compareSimhash(prevHash, currHash)
+                anomalousAsn = compareSimhash(prevHash, currHash)
                 #TODO put the following outside of the loop 
                 filename = fi.rpartition("/")[2]
                 date = filename.split(".")
@@ -223,15 +225,15 @@ if __name__ == "__main__":
 
                 # distance = prevHash.distance(currHash) 
 
-                hashHistory["date"].append(date)
-                hashHistory["distance"].append(distance)
+                # hashHistory["date"].append(date)
+                # hashHistory["distance"].append(distance)
 
-                print "%s: %s" % (date, distance)
+                print "%s: %s" % (date, anomalousASN)
 
             prevHash = currHash
 
-    plt.figure()
-    plt.plot(hashHistory["distance"])
-    plt.tight_layout()
-    plt.savefig("test.eps")
+    # plt.figure()
+    # plt.plot(hashHistory["distance"])
+    # plt.tight_layout()
+    # plt.savefig("test.eps")
 
