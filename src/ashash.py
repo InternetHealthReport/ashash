@@ -232,7 +232,7 @@ if __name__ == "__main__":
                 # hashHistory["date"].append(date)
                 # hashHistory["distance"].append(distance)
 
-                print "%s: %s anomalous sketches (dist=%s): %s" % (date, nbAnoSketch, distance,  anomalousASN)
+                print "%s: %s anomalous sketches (dist=%s): %s" % (date, nbAnoSketch, distance,  anomalousAsn)
 
             prevHash = currHash
 
