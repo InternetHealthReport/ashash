@@ -169,15 +169,19 @@ def computeSimhash(rtree, pool):
     # return simhash.Simhash(asAggProb, f=512, hashfunc=hashfunc)
 
 def compareSimhash(prevHash, curHash, sketches,  distThresh=3, minVotes=5):
-    distance = 0
+    cumDistance = 0
+    nbAnomalousSketches = 0
     votes = defaultdict(int)
     for seed, sketchSet in prevHash.iteritems():
         for m, prevHash in sketchSet.iteritems():
-            if prevHash.distance(currHash[seed][m]) > distThresh:
+            distance = prevHash.distance(currHash[seed][m]) 
+            cumDistance += distance
+            if distance > distThresh:
+                nbAnomalousSketches+=1
                 for asn in sketches[seed][m].keys():
                     votes[asn]+=1
 
-    return [asn for asn, count in votes.iteritems() if count >= minVotes] 
+    return [asn for asn, count in votes.iteritems() if count >= minVotes], nbAnomalousSketches, cumDistance
 
 if __name__ == "__main__":
 	
@@ -217,7 +221,7 @@ if __name__ == "__main__":
             currHash, sketches = computeSimhash(rtree, p)
 
             if not prevHash is None:
-                anomalousAsn = compareSimhash(prevHash, currHash)
+                anomalousAsn, nbAnoSketch, distance = compareSimhash(prevHash, currHash, sketches)
                 #TODO put the following outside of the loop 
                 filename = fi.rpartition("/")[2]
                 date = filename.split(".")
@@ -228,7 +232,7 @@ if __name__ == "__main__":
                 # hashHistory["date"].append(date)
                 # hashHistory["distance"].append(distance)
 
-                print "%s: %s" % (date, anomalousASN)
+                print "%s: %s anomalous sketches (dist=%s): %s" % (date, nbAnoSketch, distance,  anomalousASN)
 
             prevHash = currHash
 
