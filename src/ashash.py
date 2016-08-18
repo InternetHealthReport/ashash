@@ -134,7 +134,7 @@ def computeSimhash(rtree):
     print "\tTotal number of ASN: %s" % len(asProb)
     print "\tNumber of ASN kept for the hash: %s" % len(asAggProb)
 
-    return simhash.Simhash(asAggProb, f=512, hashfunc=hashfunc)
+    return simhash.Simhash(asAggProb, f=64) # f=512, hashfunc=hashfunc)
 
 
 if __name__ == "__main__":
@@ -182,7 +182,6 @@ if __name__ == "__main__":
                 distance = prevHash.distance(currHash) 
 
                 hashHistory["date"].append(date)
-                hashHistory["hash"].append(currHash)
                 hashHistory["distance"].append(distance)
 
                 print "%s: %s" % (date, distance)
