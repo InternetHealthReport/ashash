@@ -8,6 +8,8 @@ import simhash
 import matplotlib.pylab as plt
 import hashlib
 import cPickle as pickle
+from multiprocessing import Pool
+import mmh3
 
 def readrib(files):
     
@@ -90,8 +92,33 @@ def readupdates(filename, rtree):
 def hashfunc(x):
     return int(hashlib.sha512(x).hexdigest(), 16)
 
+def sketchsSimhash(sketches):
 
-def computeSimhash(rtree):
+    hashes = {}
+    for sketch, asProb in sketches.iteritems():
+        hashes[sketch] = simhash.Simhash(asProb, f=64)
+
+    return hashes
+
+def sketchSet():
+    return defaultdict(dict)
+
+def sketching(asProb, pool, N=6, M=16):
+
+    seeds = [2**i for i in range(N)]
+    sketchs = defaultdict(sketchSet) 
+    for seed in seeds:
+        for asn, prob in asProb.iteritems():
+            sketchs[seed][mmh3.hash128(asn,seed=seed)%M][asn] = prob
+            
+
+    # compute the simhash for each hash function
+    hashes= pool.map(sketchsSimhash, sketchs.itervalues())
+
+    return dict(zip(sketch.keys(), hashes))
+
+
+def computeSimhash(rtree, pool):
 
     root = rtree.search_exact("0.0.0.0/0")
     asProb = defaultdict(list)
@@ -134,8 +161,18 @@ def computeSimhash(rtree):
     print "\tTotal number of ASN: %s" % len(asProb)
     print "\tNumber of ASN kept for the hash: %s" % len(asAggProb)
 
-    return simhash.Simhash(asAggProb, f=512, hashfunc=hashfunc)
+    # sketching
+    return sketching(asAggProb, pool)
+    # return simhash.Simhash(asAggProb, f=512, hashfunc=hashfunc)
 
+def compareSimhash(prevHash, currHash):
+    distance = 0
+
+    for seed, sketchSet in prevHash.iteritems():
+        for m, prevHash in sketchSet.iteritems():
+            distance += prevHash.distance(currHash[seed][m])
+
+    return distance
 
 if __name__ == "__main__":
 	
@@ -159,6 +196,7 @@ if __name__ == "__main__":
 
     hashHistory = {"date":[], "hash":[], "distance":[]}
     prevHash = None
+    p=Pool(6)
 
     for arg in arguments:
 		
@@ -171,15 +209,16 @@ if __name__ == "__main__":
 
         for fi in update_files:
             rtree = readupdates(fi, rtree)
-            currHash = computeSimhash(rtree)
+            currHash = computeSimhash(rtree, p)
 
             if not prevHash is None:
+                distance = compareSimhash(prevHash, currHash)
                 #TODO put the following outside of the loop 
                 filename = fi.rpartition("/")[2]
                 date = filename.split(".")
                 date = "%s %s" % (date[1],date[2])
 
-                distance = prevHash.distance(currHash) 
+                # distance = prevHash.distance(currHash) 
 
                 hashHistory["date"].append(date)
                 hashHistory["hash"].append(currHash)
