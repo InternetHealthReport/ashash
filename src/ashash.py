@@ -50,6 +50,10 @@ def readupdates(filename, rtree):
         line=line.rstrip("\n")
         res = line.split('|',15)
         zOrig = res[3]
+        zPfx  = res[5]
+
+        if zPfx == "0.0.0.0/0":
+            continue
         
         if not zOrig in root.data:
             root.data[zOrig] = {"nbPrefix": 0, "asCount": defaultdict(int)}
@@ -57,7 +61,7 @@ def readupdates(filename, rtree):
        
         if res[2] == "W":
             node = rtree.search_exact(res[5])
-            if not node is None:
+            if not node is None and zOrig in node.data and len(node.data[zOrig]["path"]):
                 root.data[zOrig]["nbPrefix"] -= 1
                 for asn in node.data[zOrig]["path"]:
                     root.data[zOrig]["asCount"][asn] -= 1
@@ -110,12 +114,11 @@ def sketching(asProb, pool, N=6, M=16):
     for seed in seeds:
         for asn, prob in asProb.iteritems():
             sketchs[seed][mmh3.hash128(asn,seed=seed)%M][asn] = prob
-            
 
     # compute the simhash for each hash function
     hashes= pool.map(sketchsSimhash, sketchs.itervalues())
 
-    return dict(zip(sketch.keys(), hashes))
+    return dict(zip(sketchs.keys(), hashes))
 
 
 def computeSimhash(rtree, pool):
@@ -181,6 +184,7 @@ if __name__ == "__main__":
         print("usage: %s ribfiles*.bz2 updatefiles*.bz2" % arguments[0])
         sys.exit()
 	
+    p=Pool(6)
     arguments.pop(0)
 		
     # read rib files
@@ -196,7 +200,6 @@ if __name__ == "__main__":
 
     hashHistory = {"date":[], "hash":[], "distance":[]}
     prevHash = None
-    p=Pool(6)
 
     for arg in arguments:
 		
@@ -221,7 +224,6 @@ if __name__ == "__main__":
                 # distance = prevHash.distance(currHash) 
 
                 hashHistory["date"].append(date)
-                hashHistory["hash"].append(currHash)
                 hashHistory["distance"].append(distance)
 
                 print "%s: %s" % (date, distance)
