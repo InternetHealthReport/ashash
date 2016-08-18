@@ -168,7 +168,7 @@ def computeSimhash(rtree, pool):
     return sketching(asAggProb, pool)
     # return simhash.Simhash(asAggProb, f=512, hashfunc=hashfunc)
 
-def compareSimhash(prevHash, curHash, sketches,  distThresh=3, minVotes=5):
+def compareSimhash(prevHash, curHash, sketches,  distThresh=3, minVotes=3):
     cumDistance = 0
     nbAnomalousSketches = 0
     votes = defaultdict(int)
@@ -176,7 +176,7 @@ def compareSimhash(prevHash, curHash, sketches,  distThresh=3, minVotes=5):
         for m, prevHash in sketchSet.iteritems():
             distance = prevHash.distance(currHash[seed][m]) 
             cumDistance += distance
-            if distance > distThresh:
+            if distance >= distThresh:
                 nbAnomalousSketches+=1
                 for asn in sketches[seed][m].keys():
                     votes[asn]+=1
