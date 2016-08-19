@@ -169,7 +169,7 @@ def computeSimhash(rtree, pool):
             #print "%s: %s" % (asn, mu)
         asAggProb[asn] = mu
 
-    print "\t%s:%s peers, %s ASN, %s prefixes per peers" % (len(totalCountList), 
+    print "\t%s/%s peers, %s ASN, %s prefixes per peers" % (len(totalCountList), 
             len(root.data), len(asProb), np.mean(totalCountList))
 
     # sketching
@@ -235,7 +235,7 @@ if __name__ == "__main__":
         for fi in update_files:
             filename = fi.rpartition("/")[2]
             date = filename.split(".")
-            print("##### %s/%s #####" % (date[1], date[2]))
+            print("# %s:%s" % (date[1], date[2]))
             rtree = readupdates(fi, rtree)
             currHash, currSketches = computeSimhash(rtree, p)
 
