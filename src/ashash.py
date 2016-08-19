@@ -11,7 +11,7 @@ import cPickle as pickle
 from multiprocessing import Pool
 import mmh3
 
-def readrib(files):
+def readrib(files, spatialResolution=1, af=4):
     
     rtree = radix.Radix() 
     root = rtree.add("0.0.0.0/0")
@@ -22,27 +22,40 @@ def readrib(files):
     for line in p1.stdout: 
         res = line.split('|',16)
         zTd, zDt, zS, zOrig, zAS, zPfx, sPath, zPro, zOr, z0, z1, z2, z3, z4, z5 = res
+
+        if not af is None:
+            if af == 4 and ":" in zPfx:
+                continue
+            elif af == 6 and "." in zPfx:
+                continue
         
         if zPfx == "0.0.0.0/0":
             continue
 
         if not zOrig in root.data:
-            root.data[zOrig] = {"nbPrefix": 0, "asCount": defaultdict(int)}
+            root.data[zOrig] = {"totalCount": 0, "asCount": defaultdict(int)}
 
         node = rtree.add(zPfx)
         node.data[zOrig] = {"path": set(sPath.split(" ")), "asCount": defaultdict(int)}
-        root.data[zOrig]["nbPrefix"] += 1
+
+        count = 1
+        if spatialResolution:
+            pSize = int(zPfx.rpartition("/")[2])
+            count = 2**(32-pSize) 
+
+        root.data[zOrig]["totalCount"] += count
+
         for asn in node.data[zOrig]["path"]:
-            root.data[zOrig]["asCount"][asn] += 1
+            root.data[zOrig]["asCount"][asn] += count
+
     
     return rtree
 
 
-def readupdates(filename, rtree):
+def readupdates(filename, rtree, spatialResolution=1, af=4):
 
     p0 = Popen(["bzcat", filename], stdout=PIPE, bufsize=-1)
     p1 = Popen(["bgpdump", "-m", "-v", "-"], stdin=p0.stdout, stdout=PIPE, bufsize=-1)
-    update_tag=""
     
     root = rtree.search_exact("0.0.0.0/0")
     
@@ -52,19 +65,30 @@ def readupdates(filename, rtree):
         zOrig = res[3]
         zPfx  = res[5]
 
+        if not af is None:
+            if af == 4 and ":" in zPfx:
+                continue
+            elif af == 6 and "." in zPfx:
+                continue
+
         if zPfx == "0.0.0.0/0":
             continue
         
         if not zOrig in root.data:
-            root.data[zOrig] = {"nbPrefix": 0, "asCount": defaultdict(int)}
+            root.data[zOrig] = {"totalCount": 0, "asCount": defaultdict(int)}
 
-       
+        count = 1
+        if spatialResolution:
+            pSize = int(zPfx.rpartition("/")[2])
+            count = 2**(32-pSize) 
+
         if res[2] == "W":
             node = rtree.search_exact(res[5])
             if not node is None and zOrig in node.data and len(node.data[zOrig]["path"]):
-                root.data[zOrig]["nbPrefix"] -= 1
+
+                root.data[zOrig]["totalCount"] -= count
                 for asn in node.data[zOrig]["path"]:
-                    root.data[zOrig]["asCount"][asn] -= 1
+                    root.data[zOrig]["asCount"][asn] -= count 
                 node.data[zOrig]["path"] = []
         
         else:
@@ -79,16 +103,16 @@ def readupdates(filename, rtree):
             if node is None or not zOrig in node.data:
                 node = rtree.add(zPfx)
                 node.data[zOrig] = {"path": set(sPath.split(" ")), "asCount": defaultdict(int)}
-                root.data[zOrig]["nbPrefix"] += 1
+                root.data[zOrig]["totalCount"] += count
                 for asn in node.data[zOrig]["path"]:
-                    root.data[zOrig]["asCount"][asn] += 1
+                    root.data[zOrig]["asCount"][asn] += count 
 
             else:
                 for asn in node.data[zOrig]["path"]:
-                    root.data[zOrig]["asCount"][asn] -= 1
+                    root.data[zOrig]["asCount"][asn] -= count
                 node.data[zOrig]["path"] = set(sPath.split(" "))
                 for asn in node.data[zOrig]["path"]:
-                    root.data[zOrig]["asCount"][asn] += 1
+                    root.data[zOrig]["asCount"][asn] += count
 
     return rtree
 
@@ -107,7 +131,7 @@ def sketchesSimhash(sketches):
 def sketchSet():
     return defaultdict(dict)
 
-def sketching(asProb, pool, N=6, M=16):
+def sketching(asProb, pool, N=8, M=32):
 
     seeds = [2**i for i in range(N)]
     sketches = defaultdict(sketchSet) 
@@ -125,63 +149,55 @@ def computeSimhash(rtree, pool):
 
     root = rtree.search_exact("0.0.0.0/0")
     asProb = defaultdict(list)
-    nbPrefixList = []
+    totalCountList = []
     # For each RIB from our peers
     for peer, count in root.data.iteritems():
-        nbPrefix = count["nbPrefix"]
-        if nbPrefix <= 400000:
+        totalCount = count["totalCount"]
+        if totalCount <= 400000:
             continue
 
         asCount = count["asCount"]
-        nbPrefixList.append(nbPrefix)
-
-        # asCount = defaultdict(int)
-
-        # nbPrefix = 0
-        # for node in rtree:
-            # for asn in node.data["path"]:
-                # asCount[asn] += 1
-
-            # nbPrefix += 1
+        totalCountList.append(totalCount)
 
         for asn, nbPath in asCount.iteritems():
-            asProb[asn].append(nbPath/float(nbPrefix))
+            asProb[asn].append(nbPath/float(totalCount))
 
     asAggProb = {}
     for asn, problist in asProb.iteritems():
         mu = np.median(problist)
-        if asn == "4788" or asn == "200759" or asn == "65021":
-            print "%s: %s" % (asn, mu)
-        #if mu > 0.00001:
+        #if asn == "4788" or asn == "200759" or asn == "65021":
+            #print "%s: %s" % (asn, mu)
         asAggProb[asn] = mu
 
-    #print asAggProb
-
-    print "\t%s/%s peers" % (len(nbPrefixList), len(root.data))
-    #nbp = [v["nbPrefix"] for  v in root.data.values()]
-    #print "\t%s" % nbp
-    print "\t%s prefixes per peers" % np.mean(nbPrefixList)
-    print "\tTotal number of ASN: %s" % len(asProb)
-    print "\tNumber of ASN kept for the hash: %s" % len(asAggProb)
+    print "\t%s:%s peers, %s ASN, %s prefixes per peers" % (len(totalCountList), 
+            len(root.data), len(asProb), np.mean(totalCountList))
 
     # sketching
     return sketching(asAggProb, pool)
-    # return simhash.Simhash(asAggProb, f=512, hashfunc=hashfunc)
 
-def compareSimhash(prevHash, curHash, sketches,  distThresh=3, minVotes=3):
+
+def compareSimhash(prevHash, curHash, prevSketches, currSketches,  distThresh=6, minVotes=6):
     cumDistance = 0
     nbAnomalousSketches = 0
     votes = defaultdict(int)
+    diff = defaultdict(int)
     for seed, sketchSet in prevHash.iteritems():
         for m, prevHash in sketchSet.iteritems():
             distance = prevHash.distance(currHash[seed][m]) 
             cumDistance += distance
             if distance >= distThresh:
                 nbAnomalousSketches+=1
-                for asn in sketches[seed][m].keys():
+                for asn, currProb in currSketches[seed][m].iteritems():
                     votes[asn]+=1
+                    prevProb = 0.0
+                    if asn in prevSketches[seed][m]:
+                        prevProb = prevSketches[seed][m][asn]
+                    diff[asn] = currProb-prevProb
 
-    return [asn for asn, count in votes.iteritems() if count >= minVotes], nbAnomalousSketches, cumDistance
+    anomalousAsn = [(asn, count, diff[asn]) for asn, count in votes.iteritems() if count >= minVotes]
+
+    return anomalousAsn, nbAnomalousSketches, cumDistance
+
 
 if __name__ == "__main__":
 	
@@ -190,7 +206,7 @@ if __name__ == "__main__":
         print("usage: %s ribfiles*.bz2 updatefiles*.bz2" % arguments[0])
         sys.exit()
 	
-    p=Pool(6)
+    p=Pool(8)
     arguments.pop(0)
 		
     # read rib files
@@ -217,24 +233,30 @@ if __name__ == "__main__":
         update_files.sort()
 
         for fi in update_files:
+            filename = fi.rpartition("/")[2]
+            date = filename.split(".")
+            print("##### %s/%s #####" % (date[1], date[2]))
             rtree = readupdates(fi, rtree)
-            currHash, sketches = computeSimhash(rtree, p)
+            currHash, currSketches = computeSimhash(rtree, p)
 
             if not prevHash is None:
-                anomalousAsn, nbAnoSketch, distance = compareSimhash(prevHash, currHash, sketches)
+                anomalousAsn, nbAnoSketch, distance = compareSimhash(prevHash, currHash, prevSketches, currSketches)
                 #TODO put the following outside of the loop 
-                filename = fi.rpartition("/")[2]
-                date = filename.split(".")
-                date = "%s %s" % (date[1],date[2])
 
                 # distance = prevHash.distance(currHash) 
 
                 # hashHistory["date"].append(date)
                 # hashHistory["distance"].append(distance)
 
-                print "%s: %s anomalous sketches (dist=%s): %s" % (date, nbAnoSketch, distance,  anomalousAsn)
+                print "\t%s anomalous sketches (dist=%s)" % (nbAnoSketch, distance)
+                for asn, count, diff in anomalousAsn:
+                    if diff > 0:
+                        print "\t +++++ AS%s found in %s sketches, diff=%s +++++" % (asn, count, diff)
+                    else:
+                        print "\t ----- AS%s found in %s sketches, diff=%s -----" % (asn, count, diff)
 
             prevHash = currHash
+            prevSketches = currSketches
 
     # plt.figure()
     # plt.plot(hashHistory["distance"])
