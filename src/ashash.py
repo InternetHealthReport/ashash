@@ -47,7 +47,6 @@ def readrib(files, spatialResolution=1, af=4):
 
         for asn in node.data[zOrig]["path"]:
             root.data[zOrig]["asCount"][asn] += count
-
     
     return rtree
 
@@ -201,6 +200,9 @@ def compareSimhash(prevHash, curHash, prevSketches, currSketches,  distThresh=6,
 
 if __name__ == "__main__":
 	
+    af = 4
+    spatialResolution = 1 # 0 means prefix, 1 means IP address
+
     arguments=sys.argv
     if len(arguments) < 3:
         print("usage: %s ribfiles*.bz2 updatefiles*.bz2" % arguments[0])
@@ -217,7 +219,7 @@ if __name__ == "__main__":
         sys.exit()
 
     rib_files.sort()
-    rtree = readrib(rib_files)
+    rtree = readrib(rib_files, spatialResolution, af)
     arguments.pop(0)
 
     hashHistory = {"date":[], "hash":[], "distance":[]}
@@ -236,7 +238,7 @@ if __name__ == "__main__":
             filename = fi.rpartition("/")[2]
             date = filename.split(".")
             print("# %s:%s" % (date[1], date[2]))
-            rtree = readupdates(fi, rtree)
+            rtree = readupdates(fi, rtree, spatialResolution, af)
             currHash, currSketches = computeSimhash(rtree, p)
 
             if not prevHash is None:
