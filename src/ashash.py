@@ -108,8 +108,12 @@ def readupdates(filename, rtree, spatialResolution=1, af=4):
                     root.data[zOrig]["asCount"][asn] += count 
 
             else:
-                for asn in node.data[zOrig]["path"]:
-                    root.data[zOrig]["asCount"][asn] -= count
+                if len(node.data[zOrig]["path"]):
+                    for asn in node.data[zOrig]["path"]:
+                        root.data[zOrig]["asCount"][asn] -= count
+                else:
+                    root.data[zOrig]["totalCount"] += count
+
                 node.data[zOrig]["path"] = set(sPath.split(" "))
                 for asn in node.data[zOrig]["path"]:
                     root.data[zOrig]["asCount"][asn] += count
@@ -250,7 +254,7 @@ if __name__ == "__main__":
 
             if not prevHash is None:
                 if currHash is None:
-                    anomalousAsn = np.nan 
+                    anomalousAsn = []
                     nbAnoSketch =  np.nan
                     distance = np.nan
                 else:
@@ -274,6 +278,8 @@ if __name__ == "__main__":
                 prevHash = currHash
                 prevSketches = currSketches
 
+    pickle.dump(hashHistory, open("distance.pickle","wb"))
+
     plt.figure(figsize=(10,4))
     plt.plot(hashHistory["date"],hashHistory["distance"])
     plt.xticks(rotation=70)
@@ -288,4 +294,3 @@ if __name__ == "__main__":
     plt.tight_layout()
     plt.savefig("reportedASN.eps")
 
-    pickle.dump(hashHistory, open("distance.pickle","wb"))
