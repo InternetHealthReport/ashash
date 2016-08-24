@@ -290,7 +290,7 @@ if __name__ == "__main__":
                     hashHistory["reportedASN"].append(len(anomalousAsn))
 
                 sys.stdout.write("%s anomalous sketches (dist=%s), " % (nbAnoSketch, distance))
-                if len(nbAnomalousAsn):
+                if len(anomalousAsn):
                     sys.stdout.write("%s" % (anomalousAsn))
 
                 outFile.write("%s | %s | %s \n" % (nbAnoSketch, distance, anomalousAsn) )
