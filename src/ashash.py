@@ -186,7 +186,7 @@ def computeSimhash(rtree, pool, N, M, outFile=None):
             #print "%s: %s" % (asn, mu)
         asAggProb[asn] = mu
 
-    sys.write("%s/%s peers, %s ASN, %s prefixes per peers, " % (len(totalCountList), 
+    sys.stdout.write("%s/%s peers, %s ASN, %s prefixes per peers, " % (len(totalCountList), 
             len(root.data), len(asProb), np.mean(totalCountList)))
 
     if not outFile is None:
