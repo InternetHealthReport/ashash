@@ -3,6 +3,7 @@ from subprocess import Popen, PIPE
 import glob
 import radix
 from collections import defaultdict
+from datetime import datetime
 import numpy as np
 import simhash
 import matplotlib.pylab as plt
@@ -144,7 +145,7 @@ def sketching(asProb, pool, N=8, M=32):
     return dict(zip(sketches.keys(), hashes)), sketches
 
 
-def computeSimhash(rtree, pool):
+def computeSimhash(rtree, pool, N, M):
 
     root = rtree.search_exact("0.0.0.0/0")
     asProb = defaultdict(list)
@@ -161,6 +162,10 @@ def computeSimhash(rtree, pool):
         for asn, nbPath in asCount.iteritems():
             asProb[asn].append(nbPath/float(totalCount))
 
+    if len(totalCountList) == 0:
+        # There is no peers?
+        return None, None
+
     asAggProb = {}
     for asn, problist in asProb.iteritems():
         mu = np.median(problist)
@@ -172,7 +177,7 @@ def computeSimhash(rtree, pool):
             len(root.data), len(asProb), np.mean(totalCountList))
 
     # sketching
-    return sketching(asAggProb, pool)
+    return sketching(asAggProb, pool, N, M)
 
 
 def compareSimhash(prevHash, curHash, prevSketches, currSketches,  distThresh=6, minVotes=6):
@@ -201,7 +206,9 @@ def compareSimhash(prevHash, curHash, prevSketches, currSketches,  distThresh=6,
 if __name__ == "__main__":
 	
     af = 4
-    spatialResolution = 1 # 0 means prefix, 1 means IP address
+    spatialResolution = 0 # 0 means prefix, 1 means IP address
+    N = 8 # number of hash functions for sketching
+    M = 16 # number of sketches per hash function
 
     arguments=sys.argv
     if len(arguments) < 3:
@@ -222,7 +229,7 @@ if __name__ == "__main__":
     rtree = readrib(rib_files, spatialResolution, af)
     arguments.pop(0)
 
-    hashHistory = {"date":[], "hash":[], "distance":[]}
+    hashHistory = {"date":[], "hash":[], "distance":[], "reportedASN":[]}
     prevHash = None
 
     for arg in arguments:
@@ -239,16 +246,22 @@ if __name__ == "__main__":
             date = filename.split(".")
             print("# %s:%s" % (date[1], date[2]))
             rtree = readupdates(fi, rtree, spatialResolution, af)
-            currHash, currSketches = computeSimhash(rtree, p)
+            currHash, currSketches = computeSimhash(rtree, p, N, M)
 
             if not prevHash is None:
-                anomalousAsn, nbAnoSketch, distance = compareSimhash(prevHash, currHash, prevSketches, currSketches)
-                #TODO put the following outside of the loop 
+                if currHash is None:
+                    anomalousAsn = np.nan 
+                    nbAnoSketch =  np.nan
+                    distance = np.nan
+                else:
+                    anomalousAsn, nbAnoSketch, distance = compareSimhash(prevHash, currHash, prevSketches, currSketches)
+                    #TODO put the following outside of the loop 
 
                 # distance = prevHash.distance(currHash) 
 
-                # hashHistory["date"].append(date)
-                # hashHistory["distance"].append(distance)
+                hashHistory["date"].append( datetime.strptime(date[1]+date[2], "%Y%m%d%H%M"))
+                hashHistory["distance"].append(distance)
+                hashHistory["reportedASN"].append(len(anomalousAsn))
 
                 print "\t%s anomalous sketches (dist=%s)" % (nbAnoSketch, distance)
                 for asn, count, diff in anomalousAsn:
@@ -256,12 +269,23 @@ if __name__ == "__main__":
                         print "\t +++++ AS%s found in %s sketches, diff=%s +++++" % (asn, count, diff)
                     else:
                         print "\t ----- AS%s found in %s sketches, diff=%s -----" % (asn, count, diff)
+            
+            if not currHash is None:
+                prevHash = currHash
+                prevSketches = currSketches
 
-            prevHash = currHash
-            prevSketches = currSketches
+    plt.figure(figsize=(10,4))
+    plt.plot(hashHistory["date"],hashHistory["distance"])
+    plt.xticks(rotation=70)
+    plt.ylabel("simhash distance")
+    plt.tight_layout()
+    plt.savefig("distance.eps")
 
-    # plt.figure()
-    # plt.plot(hashHistory["distance"])
-    # plt.tight_layout()
-    # plt.savefig("test.eps")
+    plt.figure(figsize=(10,4))
+    plt.plot(hashHistory["date"],hashHistory["reportedASN"])
+    plt.xticks(rotation=70)
+    plt.ylabel("Number of reported ASN")
+    plt.tight_layout()
+    plt.savefig("reportedASN.eps")
 
+    pickle.dump(hashHistory, open("distance.pickle","wb"))
