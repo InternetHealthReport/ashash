@@ -254,7 +254,7 @@ if __name__ == "__main__":
     rtree = readrib(rib_files, args.spatial, args.af)
 
     hashHistory = {"date":[], "hash":[], "distance":[], "reportedASN":[]}
-    outFile = open(outDirectory+"/results.txt","w")
+    outFile = open(args.output+"/results.txt","w")
     prevHash = None
 
     for updates in args.updates:
