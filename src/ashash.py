@@ -1,4 +1,7 @@
 import sys
+import os
+import errno
+import argparse
 from subprocess import Popen, PIPE
 import glob
 import radix
@@ -24,7 +27,7 @@ def readrib(files, spatialResolution=1, af=4):
         res = line.split('|',16)
         zTd, zDt, zS, zOrig, zAS, zPfx, sPath, zPro, zOr, z0, z1, z2, z3, z4, z5 = res
 
-        if not af is None:
+        if af!=0:
             if af == 4 and ":" in zPfx:
                 continue
             elif af == 6 and "." in zPfx:
@@ -42,7 +45,10 @@ def readrib(files, spatialResolution=1, af=4):
         count = 1
         if spatialResolution:
             pSize = int(zPfx.rpartition("/")[2])
-            count = 2**(32-pSize) 
+            if "." in zPfx:
+                count = 2**(32-pSize) 
+            elif ":" in zPfx:
+                count = 2**(128-pSize) 
 
         root.data[zOrig]["totalCount"] += count
 
@@ -65,7 +71,7 @@ def readupdates(filename, rtree, spatialResolution=1, af=4):
         zOrig = res[3]
         zPfx  = res[5]
 
-        if not af is None:
+        if af != 0:
             if af == 4 and ":" in zPfx:
                 continue
             elif af == 6 and "." in zPfx:
@@ -80,7 +86,10 @@ def readupdates(filename, rtree, spatialResolution=1, af=4):
         count = 1
         if spatialResolution:
             pSize = int(zPfx.rpartition("/")[2])
-            count = 2**(32-pSize) 
+            if "." in zPfx:
+                count = 2**(32-pSize) 
+            elif ":" in zPfx:
+                count = 2**(128-pSize) 
 
         if res[2] == "W":
             node = rtree.search_exact(res[5])
@@ -149,7 +158,7 @@ def sketching(asProb, pool, N=8, M=32):
     return dict(zip(sketches.keys(), hashes)), sketches
 
 
-def computeSimhash(rtree, pool, N, M):
+def computeSimhash(rtree, pool, N, M, outFile=None):
 
     root = rtree.search_exact("0.0.0.0/0")
     asProb = defaultdict(list)
@@ -177,8 +186,11 @@ def computeSimhash(rtree, pool, N, M):
             #print "%s: %s" % (asn, mu)
         asAggProb[asn] = mu
 
-    print "\t%s/%s peers, %s ASN, %s prefixes per peers" % (len(totalCountList), 
-            len(root.data), len(asProb), np.mean(totalCountList))
+    sys.write("%s/%s peers, %s ASN, %s prefixes per peers, " % (len(totalCountList), 
+            len(root.data), len(asProb), np.mean(totalCountList)))
+
+    if not outFile is None:
+        outFile.write("%s | %s | %s %s | " % (len(totalCountList), len(root.data), len(asProb), np.mean(totalCountList)))
 
     # sketching
     return sketching(asAggProb, pool, N, M)
@@ -208,37 +220,46 @@ def compareSimhash(prevHash, curHash, prevSketches, currSketches,  distThresh=6,
 
 
 if __name__ == "__main__":
-	
-    af = 4
-    spatialResolution = 0 # 0 means prefix, 1 means IP address
-    N = 8 # number of hash functions for sketching
-    M = 16 # number of sketches per hash function
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-a","--af", help="address family (4, 6, or 0 for both)", type=int, default=4)
+    parser.add_argument("-N", help="number of hash functions for sketching", type=int, default=8)
+    parser.add_argument("-M", help="number of sketches per hash function", type=int, default=16)
+    parser.add_argument("-p", "--proc", help="number of processes", type=int)
+    parser.add_argument("-s", "--spatial", help="spatial resolution (0 for prefix, 1 for address)", type=int, default=0)
+    parser.add_argument("--plot", help="plot figures", action="store_true")
+    parser.add_argument("ribs", help="RIBS files")
+    parser.add_argument("updates", help="UPDATES files", nargs="+")
+    parser.add_argument("output", help="output directory")
+    args = parser.parse_args()
 
-    arguments=sys.argv
-    if len(arguments) < 3:
-        print("usage: %s ribfiles*.bz2 updatefiles*.bz2" % arguments[0])
-        sys.exit()
-	
-    p=Pool(8)
-    arguments.pop(0)
+    if args.proc is None:
+        args.proc = args.N
+
+    try:
+        os.makedirs(os.path.dirname(args.output))
+    except OSError as exc: # Guard against race condition
+        if exc.errno != errno.EEXIST:
+            raise
+
+    p=Pool(args.proc)
 		
     # read rib files
-    rib_files = glob.glob(arguments[0])
+    rib_files = glob.glob(args.ribs)
 	
     if len(rib_files)==0:
-        print("Files not found!")
+        sys.stderr.write("Files not found!\n")
         sys.exit()
 
     rib_files.sort()
-    rtree = readrib(rib_files, spatialResolution, af)
-    arguments.pop(0)
+    rtree = readrib(rib_files, args.spatial, args.af)
 
     hashHistory = {"date":[], "hash":[], "distance":[], "reportedASN":[]}
+    outFile = open(outDirectory+"/results.txt","w")
     prevHash = None
 
-    for arg in arguments:
+    for updates in args.updates:
 		
-        update_files = glob.glob(arg)
+        update_files = glob.glob(updates)
 	
         if len(update_files)==0:
             sys.exit()
@@ -248,9 +269,10 @@ if __name__ == "__main__":
         for fi in update_files:
             filename = fi.rpartition("/")[2]
             date = filename.split(".")
-            print("# %s:%s" % (date[1], date[2]))
-            rtree = readupdates(fi, rtree, spatialResolution, af)
-            currHash, currSketches = computeSimhash(rtree, p, N, M)
+            sys.stdout.write("^[[2K\r %s:%s" % (date[1], date[2]))
+            outFile.write("%s:%s | " % (date[1], date[2]) )
+            rtree = readupdates(fi, rtree, args.spatial, args.af)
+            currHash, currSketches = computeSimhash(rtree, p, args.N, args.M)
 
             if not prevHash is None:
                 if currHash is None:
@@ -262,35 +284,35 @@ if __name__ == "__main__":
                     #TODO put the following outside of the loop 
 
                 # distance = prevHash.distance(currHash) 
+                if args.plot:
+                    hashHistory["date"].append( datetime.strptime(date[1]+date[2], "%Y%m%d%H%M"))
+                    hashHistory["distance"].append(distance)
+                    hashHistory["reportedASN"].append(len(anomalousAsn))
 
-                hashHistory["date"].append( datetime.strptime(date[1]+date[2], "%Y%m%d%H%M"))
-                hashHistory["distance"].append(distance)
-                hashHistory["reportedASN"].append(len(anomalousAsn))
+                sys.stdout.write("%s anomalous sketches (dist=%s), " % (nbAnoSketch, distance))
+                if len(nbAnomalousAsn):
+                    sys.stdout.write("%s" % (anomalousAsn))
 
-                print "\t%s anomalous sketches (dist=%s)" % (nbAnoSketch, distance)
-                for asn, count, diff in anomalousAsn:
-                    if diff > 0:
-                        print "\t +++++ AS%s found in %s sketches, diff=%s +++++" % (asn, count, diff)
-                    else:
-                        print "\t ----- AS%s found in %s sketches, diff=%s -----" % (asn, count, diff)
+                outFile.write("%s | %s | %s \n" % (nbAnoSketch, distance, anomalousAsn) )
             
             if not currHash is None:
                 prevHash = currHash
                 prevSketches = currSketches
 
-    pickle.dump(hashHistory, open("distance.pickle","wb"))
+    if args.plot :
+        # pickle.dump(hashHistory, open("distance.pickle","wb"))
 
-    plt.figure(figsize=(10,4))
-    plt.plot(hashHistory["date"],hashHistory["distance"])
-    plt.xticks(rotation=70)
-    plt.ylabel("simhash distance")
-    plt.tight_layout()
-    plt.savefig("distance.eps")
+        plt.figure(figsize=(10,4))
+        plt.plot(hashHistory["date"],hashHistory["distance"])
+        plt.xticks(rotation=70)
+        plt.ylabel("simhash distance")
+        plt.tight_layout()
+        plt.savefig("distance.eps")
 
-    plt.figure(figsize=(10,4))
-    plt.plot(hashHistory["date"],hashHistory["reportedASN"])
-    plt.xticks(rotation=70)
-    plt.ylabel("Number of reported ASN")
-    plt.tight_layout()
-    plt.savefig("reportedASN.eps")
+        plt.figure(figsize=(10,4))
+        plt.plot(hashHistory["date"],hashHistory["reportedASN"])
+        plt.xticks(rotation=70)
+        plt.ylabel("Number of reported ASN")
+        plt.tight_layout()
+        plt.savefig("reportedASN.eps")
 
