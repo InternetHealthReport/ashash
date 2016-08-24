@@ -270,11 +270,11 @@ if __name__ == "__main__":
             filename = fi.rpartition("/")[2]
             date = filename.split(".")
             sys.stdout.write("^[[2K\r %s:%s" % (date[1], date[2]))
-            outFile.write("%s:%s | " % (date[1], date[2]) )
             rtree = readupdates(fi, rtree, args.spatial, args.af)
             currHash, currSketches = computeSimhash(rtree, p, args.N, args.M)
 
             if not prevHash is None:
+                outFile.write("%s:%s | " % (date[1], date[2]) )
                 if currHash is None:
                     anomalousAsn = []
                     nbAnoSketch =  np.nan
@@ -292,6 +292,7 @@ if __name__ == "__main__":
                 sys.stdout.write("%s anomalous sketches (dist=%s), " % (nbAnoSketch, distance))
                 if len(anomalousAsn):
                     sys.stdout.write("%s" % (anomalousAsn))
+                sys.stdout.flush()
 
                 outFile.write("%s | %s | %s \n" % (nbAnoSketch, distance, anomalousAsn) )
             
