@@ -269,7 +269,7 @@ if __name__ == "__main__":
         for fi in update_files:
             filename = fi.rpartition("/")[2]
             date = filename.split(".")
-            sys.stdout.write("^[[2K\r %s:%s" % (date[1], date[2]))
+            sys.stdout.write("\r %s:%s " % (date[1], date[2]))
             rtree = readupdates(fi, rtree, args.spatial, args.af)
             currHash, currSketches = computeSimhash(rtree, p, args.N, args.M)
 
@@ -295,6 +295,7 @@ if __name__ == "__main__":
                 sys.stdout.flush()
 
                 outFile.write("%s | %s | %s \n" % (nbAnoSketch, distance, anomalousAsn) )
+                outFile.flush()
             
             if not currHash is None:
                 prevHash = currHash
