@@ -66,8 +66,8 @@ def readupdates(filename, rtree, spatialResolution=1, af=4):
     root = rtree.search_exact("0.0.0.0/0")
     
     for line in p1.stdout:
-        line=line.rstrip("\n")
-        res = line.split('|',15)
+        # line=line.rstrip("\n")
+        res = line[:-1].split('|',15)
         zOrig = res[3]
         zPfx  = res[5]
 
@@ -144,7 +144,7 @@ def sketchesSimhash(sketches):
 def sketchSet():
     return defaultdict(dict)
 
-def sketching(asProb, pool, N=8, M=32):
+def sketching(asProb, pool, N, M):
 
     seeds = [2**i for i in range(N)]
     sketches = defaultdict(sketchSet) 
@@ -196,7 +196,7 @@ def computeSimhash(rtree, pool, N, M, outFile=None):
     return sketching(asAggProb, pool, N, M)
 
 
-def compareSimhash(prevHash, curHash, prevSketches, currSketches,  distThresh=6, minVotes=6):
+def compareSimhash(prevHash, curHash, prevSketches, currSketches, minVotes,  distThresh=3):
     cumDistance = 0
     nbAnomalousSketches = 0
     votes = defaultdict(int)
@@ -205,7 +205,7 @@ def compareSimhash(prevHash, curHash, prevSketches, currSketches,  distThresh=6,
         for m, prevHash in sketchSet.iteritems():
             distance = prevHash.distance(currHash[seed][m]) 
             cumDistance += distance
-            if distance >= distThresh:
+            if distance > distThresh:
                 nbAnomalousSketches+=1
                 for asn, currProb in currSketches[seed][m].iteritems():
                     votes[asn]+=1
@@ -222,8 +222,9 @@ def compareSimhash(prevHash, curHash, prevSketches, currSketches,  distThresh=6,
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-a","--af", help="address family (4, 6, or 0 for both)", type=int, default=4)
-    parser.add_argument("-N", help="number of hash functions for sketching", type=int, default=8)
-    parser.add_argument("-M", help="number of sketches per hash function", type=int, default=16)
+    parser.add_argument("-N", help="number of hash functions for sketching", type=int, default=16)
+    parser.add_argument("-M", help="number of sketches per hash function", type=int, default=128)
+    parser.add_argument("-d", help="simhash distance threshold", type=int, default=3)
     parser.add_argument("-p", "--proc", help="number of processes", type=int)
     parser.add_argument("-s", "--spatial", help="spatial resolution (0 for prefix, 1 for address)", type=int, default=0)
     parser.add_argument("--plot", help="plot figures", action="store_true")
@@ -280,7 +281,7 @@ if __name__ == "__main__":
                     nbAnoSketch =  np.nan
                     distance = np.nan
                 else:
-                    anomalousAsn, nbAnoSketch, distance = compareSimhash(prevHash, currHash, prevSketches, currSketches)
+                    anomalousAsn, nbAnoSketch, distance = compareSimhash(prevHash, currHash, prevSketches, currSketches, int(N*0.75), distThresh)
                     #TODO put the following outside of the loop 
 
                 # distance = prevHash.distance(currHash) 
