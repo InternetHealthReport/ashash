@@ -225,6 +225,7 @@ if __name__ == "__main__":
     parser.add_argument("-N", help="number of hash functions for sketching", type=int, default=16)
     parser.add_argument("-M", help="number of sketches per hash function", type=int, default=128)
     parser.add_argument("-d","--distThresh", help="simhash distance threshold", type=int, default=3)
+    parser.add_argument("-r","--minVoteRatio", help="Minimum ratio of sketches to detect anomalies (should be between 0 and 1)", type=float, default=0.75)
     parser.add_argument("-p", "--proc", help="number of processes", type=int)
     parser.add_argument("-s", "--spatial", help="spatial resolution (0 for prefix, 1 for address)", type=int, default=0)
     parser.add_argument("--plot", help="plot figures", action="store_true")
@@ -281,7 +282,7 @@ if __name__ == "__main__":
                     nbAnoSketch =  np.nan
                     distance = np.nan
                 else:
-                    anomalousAsn, nbAnoSketch, distance = compareSimhash(prevHash, currHash, prevSketches, currSketches, int(args.N*0.75), args.distThresh)
+                    anomalousAsn, nbAnoSketch, distance = compareSimhash(prevHash, currHash, prevSketches, currSketches, int(args.N*args.minVoteRatio), args.distThresh)
                     #TODO put the following outside of the loop 
 
                 # distance = prevHash.distance(currHash) 
