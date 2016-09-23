@@ -182,8 +182,6 @@ def computeSimhash(rtree, pool, N, M, outFile=None):
     asAggProb = {}
     for asn, problist in asProb.iteritems():
         mu = np.median(problist)
-        #if asn == "4788" or asn == "200759" or asn == "65021":
-            #print "%s: %s" % (asn, mu)
         asAggProb[asn] = mu
 
     sys.stdout.write("%s/%s peers, %s ASN, %s prefixes per peers, " % (len(totalCountList), 
@@ -273,7 +271,7 @@ if __name__ == "__main__":
             date = filename.split(".")
             sys.stdout.write("\r %s:%s " % (date[1], date[2]))
             rtree = readupdates(fi, rtree, args.spatial, args.af)
-            currHash, currSketches = computeSimhash(rtree, p, args.N, args.M)
+            currHash, currSketches = computeSimhash(rtree, p, args.N, args.M, outFile)
 
             if not prevHash is None:
                 outFile.write("%s:%s | " % (date[1], date[2]) )
@@ -283,9 +281,7 @@ if __name__ == "__main__":
                     distance = np.nan
                 else:
                     anomalousAsn, nbAnoSketch, distance = compareSimhash(prevHash, currHash, prevSketches, currSketches, int(args.N*args.minVoteRatio), args.distThresh)
-                    #TODO put the following outside of the loop 
 
-                # distance = prevHash.distance(currHash) 
                 if args.plot:
                     hashHistory["date"].append( datetime.strptime(date[1]+date[2], "%Y%m%d%H%M"))
                     hashHistory["distance"].append(distance)
