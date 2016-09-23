@@ -221,9 +221,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-a","--af", help="address family (4, 6, or 0 for both)", type=int, default=4)
     parser.add_argument("-N", help="number of hash functions for sketching", type=int, default=16)
-    parser.add_argument("-M", help="number of sketches per hash function", type=int, default=128)
+    parser.add_argument("-M", help="number of sketches per hash function", type=int, default=64)
     parser.add_argument("-d","--distThresh", help="simhash distance threshold", type=int, default=3)
-    parser.add_argument("-r","--minVoteRatio", help="Minimum ratio of sketches to detect anomalies (should be between 0 and 1)", type=float, default=0.75)
+    parser.add_argument("-r","--minVoteRatio", help="Minimum ratio of sketches to detect anomalies (should be between 0 and 1)", type=float, default=0.5)
     parser.add_argument("-p", "--proc", help="number of processes", type=int)
     parser.add_argument("-s", "--spatial", help="spatial resolution (0 for prefix, 1 for address)", type=int, default=0)
     parser.add_argument("--plot", help="plot figures", action="store_true")
@@ -245,22 +245,22 @@ if __name__ == "__main__":
 		
     # read rib files
     rib_files = glob.glob(args.ribs)
-	
     if len(rib_files)==0:
         sys.stderr.write("Files not found!\n")
         sys.exit()
 
     rib_files.sort()
     rtree = readrib(rib_files, args.spatial, args.af)
+    prevHash, prevSketches = computeSimhash(rtree, p, args.N, args.M)
 
+    # initialisation for the figures and output
     hashHistory = {"date":[], "hash":[], "distance":[], "reportedASN":[]}
     outFile = open(args.output+"/results.txt","w")
-    prevHash = None
 
+    # read update files
     for updates in args.updates:
 		
         update_files = glob.glob(updates)
-	
         if len(update_files)==0:
             sys.exit()
 			
@@ -271,30 +271,30 @@ if __name__ == "__main__":
             date = filename.split(".")
             sys.stdout.write("\r %s:%s " % (date[1], date[2]))
             rtree = readupdates(fi, rtree, args.spatial, args.af)
+
+            outFile.write("%s:%s | " % (date[1], date[2]) )
             currHash, currSketches = computeSimhash(rtree, p, args.N, args.M, outFile)
 
-            if not prevHash is None:
-                outFile.write("%s:%s | " % (date[1], date[2]) )
-                if currHash is None:
-                    anomalousAsn = []
-                    nbAnoSketch =  np.nan
-                    distance = np.nan
-                else:
-                    anomalousAsn, nbAnoSketch, distance = compareSimhash(prevHash, currHash, prevSketches, currSketches, int(args.N*args.minVoteRatio), args.distThresh)
+            if currHash is None:
+                anomalousAsn = []
+                nbAnoSketch =  np.nan
+                distance = np.nan
+            else:
+                anomalousAsn, nbAnoSketch, distance = compareSimhash(prevHash, currHash, prevSketches, currSketches, int(args.N*args.minVoteRatio), args.distThresh)
 
-                if args.plot:
-                    hashHistory["date"].append( datetime.strptime(date[1]+date[2], "%Y%m%d%H%M"))
-                    hashHistory["distance"].append(distance)
-                    hashHistory["reportedASN"].append(len(anomalousAsn))
+            if args.plot:
+                hashHistory["date"].append( datetime.strptime(date[1]+date[2], "%Y%m%d%H%M"))
+                hashHistory["distance"].append(distance)
+                hashHistory["reportedASN"].append(len(anomalousAsn))
 
-                sys.stdout.write("%s anomalous sketches (dist=%s), " % (nbAnoSketch, distance))
-                if len(anomalousAsn):
-                    sys.stdout.write("%s" % (anomalousAsn))
-                sys.stdout.flush()
+            sys.stdout.write("%s anomalous sketches (dist=%s), " % (nbAnoSketch, distance))
+            if len(anomalousAsn):
+                sys.stdout.write("%s" % (anomalousAsn))
+            sys.stdout.flush()
 
-                outFile.write("%s | %s | %s \n" % (nbAnoSketch, distance, anomalousAsn) )
-                outFile.flush()
-            
+            outFile.write("%s | %s | %s \n" % (nbAnoSketch, distance, anomalousAsn) )
+            outFile.flush()
+        
             if not currHash is None:
                 prevHash = currHash
                 prevSketches = currSketches
