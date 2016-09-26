@@ -206,7 +206,7 @@ def sketching(asProb, pool, N, M):
     return dict(zip(sketches.keys(), hashes)), sketches
 
 
-def computeSimhash(rtree, pool, N, M, outFile=None):
+def computeSimhash(rtree, pool, N, M, spatial, outFile=None):
 
     root = rtree.search_exact("0.0.0.0/0")
     asProb = defaultdict(list)
@@ -214,7 +214,7 @@ def computeSimhash(rtree, pool, N, M, outFile=None):
     # For each RIB from our peers
     for peer, count in root.data.iteritems():
         totalCount = count["totalCount"]
-        if totalCount <= 400000:
+        if (totalCount <= 400000 and not spatial) or (totalCount <= 2000000000 and spatial):
             continue
 
         asCount = count["asCount"]
@@ -236,7 +236,7 @@ def computeSimhash(rtree, pool, N, M, outFile=None):
             len(root.data), len(asProb), np.mean(totalCountList)))
 
     if not outFile is None:
-        outFile.write("%s | %s | %s %s | " % (len(totalCountList), len(root.data), len(asProb), np.mean(totalCountList)))
+        outFile.write("%s | %s | %s | %s | " % (len(totalCountList), len(root.data), len(asProb), np.mean(totalCountList)))
 
     # sketching
     return sketching(asAggProb, pool, N, M)
@@ -299,7 +299,7 @@ if __name__ == "__main__":
 
     rib_files.sort()
     rtree = readrib(rib_files, args.spatial, args.af)
-    prevHash, prevSketches = computeSimhash(rtree, p, args.N, args.M)
+    prevHash, prevSketches = computeSimhash(rtree, p, args.N, args.M, args.spatial)
 
     # initialisation for the figures and output
     hashHistory = {"date":[], "hash":[], "distance":[], "reportedASN":[]}
@@ -321,7 +321,7 @@ if __name__ == "__main__":
             rtree = readupdates(fi, rtree, args.spatial, args.af)
 
             outFile.write("%s:%s | " % (date[1], date[2]) )
-            currHash, currSketches = computeSimhash(rtree, p, args.N, args.M, outFile)
+            currHash, currSketches = computeSimhash(rtree, p, args.N, args.M, args.spatial, outFile)
 
             if currHash is None:
                 anomalousAsn = []
