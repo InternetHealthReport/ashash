@@ -20,8 +20,8 @@ def readrib(files, spatialResolution=1, af=4):
     rtree = radix.Radix() 
     root = rtree.add("0.0.0.0/0")
 
-    p0 = Popen(["bzcat"]+files, stdout=PIPE, bufsize=-1)
-    p1 = Popen(["bgpdump", "-m", "-v", "-t", "change", "-"], stdin=p0.stdout, stdout=PIPE, bufsize=-1)
+    # p0 = Popen(["bzcat"]+files, stdout=PIPE, bufsize=-1)
+    p1 = Popen(["bgpdump", "-m", "-v", "-t", "change", files], stdout=PIPE, bufsize=-1)
 
     for line in p1.stdout: 
         res = line.split('|',16)
@@ -60,8 +60,8 @@ def readrib(files, spatialResolution=1, af=4):
 
 def readupdates(filename, rtree, spatialResolution=1, af=4):
 
-    p0 = Popen(["bzcat", filename], stdout=PIPE, bufsize=-1)
-    p1 = Popen(["bgpdump", "-m", "-v", "-"], stdin=p0.stdout, stdout=PIPE, bufsize=-1)
+    # p0 = Popen(["bzcat", filename], stdout=PIPE, bufsize=-1)
+    p1 = Popen(["bgpdump", "-m", "-v", filename], stdout=PIPE, bufsize=-1)
     
     root = rtree.search_exact("0.0.0.0/0")
     
@@ -146,7 +146,7 @@ def sketchSet():
 
 def sketching(asProb, pool, N, M):
 
-    seeds = [2**i for i in range(N)]
+    seeds = [2**i for i in range(1,N+1)]
     sketches = defaultdict(sketchSet) 
     for seed in seeds:
         for asn, prob in asProb.iteritems():
