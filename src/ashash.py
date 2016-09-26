@@ -15,6 +15,17 @@ import cPickle as pickle
 from multiprocessing import Pool
 import mmh3
 
+
+def findParent(node, zOrig):
+    parent = node.parent
+    if parent is None or parent.prefix == "0.0.0.0/0":
+        return None
+    elif zOrig in parent.data and len(parent.data[zOrig]["path"]):
+        return parent
+    else:
+        return findParent(parent, zOrig)
+
+
 def readrib(files, spatialResolution=1, af=4):
     
     rtree = radix.Radix() 
@@ -24,8 +35,7 @@ def readrib(files, spatialResolution=1, af=4):
     p1 = Popen(["bgpdump", "-m", "-v", "-t", "change", "-"], stdin=p0.stdout, stdout=PIPE, bufsize=-1)
 
     for line in p1.stdout: 
-        res = line.split('|',16)
-        zTd, zDt, zS, zOrig, zAS, zPfx, sPath, zPro, zOr, z0, z1, z2, z3, z4, z5 = res
+        zTd, zDt, zS, zOrig, zAS, zPfx, sPath, zPro, zOr, z0, z1, z2, z3, z4, z5 = line.split('|',16)
 
         if af!=0:
             if af == 4 and ":" in zPfx:
@@ -40,17 +50,29 @@ def readrib(files, spatialResolution=1, af=4):
             root.data[zOrig] = {"totalCount": 0, "asCount": defaultdict(int)}
 
         node = rtree.add(zPfx)
-        node.data[zOrig] = {"path": set(sPath.split(" ")), "asCount": defaultdict(int)}
+        node.data[zOrig] = {"path": set(sPath.split(" ")), "count": 0}
 
         count = 1
         if spatialResolution:
-            pSize = int(zPfx.rpartition("/")[2])
             if "." in zPfx:
-                count = 2**(32-pSize) 
+                count = 2**(32-node.prefixlen) 
             elif ":" in zPfx:
-                count = 2**(128-pSize) 
+                count = 2**(128-node.prefixlen) 
 
-        root.data[zOrig]["totalCount"] += count
+            countBelow = np.sum([n.data[zOrig]["count"] for n in rtree.search_covered(zPfx) if zOrig in n.data])
+            count -= countBelow
+
+            # Update above nodes
+            parent = findParent(node, zOrig)
+            if parent is None:
+                root.data[zOrig]["totalCount"] += count
+            else:
+                parent.data[zOrig]["count"] -= count
+                for asn in parent.data[zOrig]["path"]:
+                    root.data[zOrig]["asCount"][asn] -= count 
+        
+        else: 
+            root.data[zOrig]["totalCount"] += count
 
         for asn in node.data[zOrig]["path"]:
             root.data[zOrig]["asCount"][asn] += count
@@ -60,68 +82,94 @@ def readrib(files, spatialResolution=1, af=4):
 
 def readupdates(filename, rtree, spatialResolution=1, af=4):
 
-    # p0 = Popen(["bzcat", filename], stdout=PIPE, bufsize=-1)
     p1 = Popen(["bgpdump", "-m", "-v", filename],  stdout=PIPE, bufsize=-1)
-    
     root = rtree.search_exact("0.0.0.0/0")
     
     for line in p1.stdout:
-        # line=line.rstrip("\n")
         res = line[:-1].split('|',15)
-        zOrig = res[3]
-        zPfx  = res[5]
 
-        if af != 0:
-            if af == 4 and ":" in zPfx:
-                continue
-            elif af == 6 and "." in zPfx:
-                continue
-
-        if zPfx == "0.0.0.0/0":
+        if res[5] == "0.0.0.0/0":
             continue
         
-        if not zOrig in root.data:
-            root.data[zOrig] = {"totalCount": 0, "asCount": defaultdict(int)}
+        if af != 0:
+            if af == 4 and ":" in res[5]:
+                continue
+            elif af == 6 and "." in res[5]:
+                continue
 
+        if not res[3] in root.data:
+            root.data[res[3]] = {"totalCount": 0, "asCount": defaultdict(int)}
+
+        node = rtree.search_exact(res[5])
         count = 1
-        if spatialResolution:
-            pSize = int(zPfx.rpartition("/")[2])
-            if "." in zPfx:
-                count = 2**(32-pSize) 
-            elif ":" in zPfx:
-                count = 2**(128-pSize) 
 
         if res[2] == "W":
-            node = rtree.search_exact(res[5])
+            zOrig = res[3]
+            # Withdraw: remove the corresponding node
             if not node is None and zOrig in node.data and len(node.data[zOrig]["path"]):
+                count = node.data[zOrig]["count"]
 
-                root.data[zOrig]["totalCount"] -= count
-                for asn in node.data[zOrig]["path"]:
-                    root.data[zOrig]["asCount"][asn] -= count 
-                node.data[zOrig]["path"] = []
+                if spatialResolution:
+                    # Update count for above node
+                    parent = findParent(node, zOrig) 
+                    if parent is None:
+                        # No above node, remove these ips from the total
+                        root.data[zOrig]["totalCount"] -= count
+                    else:
+                        # Add ips to above node and corresponding ASes
+                        parent.data[zOrig]["count"] += count
+                        for asn in parent.data[zOrig]["path"]:
+                            root.data[zOrig]["asCount"][asn] += count 
+
+                    for asn in node.data[zOrig]["path"]:
+                        root.data[zOrig]["asCount"][asn] -= count 
+                    node.data[zOrig]["path"] = []
+                    node.data[zOrig]["count"] = 0
+
+                else: 
+                    root.data[zOrig]["totalCount"] -= count
+                    for asn in node.data[zOrig]["path"]:
+                        root.data[zOrig]["asCount"][asn] -= count 
+                    node.data[zOrig]["path"] = []
         
         else:
             zTd, zDt, zS, zOrig, zAS, zPfx, sPath, zPro, zOr, z0, z1, z2, z3, z4, z5 = res
+            # Announce:
+            if node is None or not zOrig in node.data or not len(node.data[zOrig]["path"]):
+                # Add a new node 
 
-            if zPfx == "0.0.0.0/0":
-                continue
-
-            node = rtree.search_exact(zPfx)
-            path_list = sPath.split(' ')
-
-            if node is None or not zOrig in node.data:
                 node = rtree.add(zPfx)
-                node.data[zOrig] = {"path": set(sPath.split(" ")), "asCount": defaultdict(int)}
-                root.data[zOrig]["totalCount"] += count
+                if spatialResolution:
+                    # Compute the exact number of IPs
+                    if "." in zPfx:
+                        count = 2**(32-node.prefixlen) 
+                    elif ":" in zPfx:
+                        count = 2**(128-node.prefixlen) 
+                    countBelow = np.sum([n.data[zOrig]["count"] for n in rtree.search_covered(zPfx) if zOrig in n.data])
+                    count -= countBelow
+
+                    # Update above nodes
+                    parent = findParent(node, zOrig)
+                    if parent is None:
+                        root.data[zOrig]["totalCount"] += count
+                    else:
+                        parent.data[zOrig]["count"] -= count
+                        for asn in parent.data[zOrig]["path"]:
+                            root.data[zOrig]["asCount"][asn] -= count 
+
+                else:
+                    root.data[zOrig]["totalCount"] += count
+
+                # Update the ASes counts
+                node.data[zOrig] = {"path": set(sPath.split(" ")), "count": count}
                 for asn in node.data[zOrig]["path"]:
                     root.data[zOrig]["asCount"][asn] += count 
 
             else:
-                if len(node.data[zOrig]["path"]):
-                    for asn in node.data[zOrig]["path"]:
-                        root.data[zOrig]["asCount"][asn] -= count
-                else:
-                    root.data[zOrig]["totalCount"] += count
+                #Update node path and counts
+                count = node.data[zOrig]["count"]
+                for asn in node.data[zOrig]["path"]:
+                    root.data[zOrig]["asCount"][asn] -= count
 
                 node.data[zOrig]["path"] = set(sPath.split(" "))
                 for asn in node.data[zOrig]["path"]:
@@ -315,4 +363,6 @@ if __name__ == "__main__":
         plt.ylabel("Number of reported ASN")
         plt.tight_layout()
         plt.savefig("reportedASN.eps")
+
+    #TODO dump radix if needed
 
