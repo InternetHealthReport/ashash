@@ -26,13 +26,13 @@ def findParent(node, zOrig):
         return findParent(parent, zOrig)
 
 
-def readrib(files, spatialResolution=1, af=4):
+def readrib(ribfile, spatialResolution=1, af=4, rtree=None):
     
-    rtree = radix.Radix() 
-    root = rtree.add("0.0.0.0/0")
+    if rtree is None:
+        rtree = radix.Radix() 
+        root = rtree.add("0.0.0.0/0")
 
-    p0 = Popen(["bzcat"]+files, stdout=PIPE, bufsize=-1)
-    p1 = Popen(["bgpdump", "-m", "-v", "-t", "change", "-"], stdin=p0.stdout, stdout=PIPE, bufsize=-1)
+    p1 = Popen(["bgpdump", "-m", "-v", "-t", "change", ribfile], stdout=PIPE, bufsize=-1)
 
     for line in p1.stdout: 
         zTd, zDt, zS, zOrig, zAS, zPfx, sPath, zPro, zOr, z0, z1, z2, z3, z4, z5 = line.split('|',16)
@@ -61,6 +61,7 @@ def readrib(files, spatialResolution=1, af=4):
 
             countBelow = np.sum([n.data[zOrig]["count"] for n in rtree.search_covered(zPfx) if zOrig in n.data])
             count -= countBelow
+            node.data[zOrig]["count"] = count
 
             # Update above nodes
             parent = findParent(node, zOrig)
@@ -273,7 +274,7 @@ if __name__ == "__main__":
     parser.add_argument("-d","--distThresh", help="simhash distance threshold", type=int, default=3)
     parser.add_argument("-r","--minVoteRatio", help="Minimum ratio of sketches to detect anomalies (should be between 0 and 1)", type=float, default=0.5)
     parser.add_argument("-p", "--proc", help="number of processes", type=int)
-    parser.add_argument("-s", "--spatial", help="spatial resolution (0 for prefix, 1 for address)", type=int, default=0)
+    parser.add_argument("-s", "--spatial", help="spatial resolution (0 for prefix, 1 for address)", type=int, default=1)
     parser.add_argument("--plot", help="plot figures", action="store_true")
     parser.add_argument("ribs", help="RIBS files")
     parser.add_argument("updates", help="UPDATES files", nargs="+")
@@ -298,12 +299,16 @@ if __name__ == "__main__":
         sys.exit()
 
     rib_files.sort()
-    rtree = readrib(rib_files, args.spatial, args.af)
+    
+    rtree = None
+    for ribfile in rib_files:
+        rtree = readrib(ribfile, args.spatial, args.af, rtree)
+
     prevHash, prevSketches = computeSimhash(rtree, p, args.N, args.M, args.spatial)
 
     # initialisation for the figures and output
     hashHistory = {"date":[], "hash":[], "distance":[], "reportedASN":[]}
-    outFile = open(args.output+"/results.txt","w")
+    outFile = open(args.output+"/results_ip.txt","w")
 
     # read update files
     for updates in args.updates:
