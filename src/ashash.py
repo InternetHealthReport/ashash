@@ -102,15 +102,14 @@ def readupdates(filename, rtree, spatialResolution=1, af=4):
             root.data[res[3]] = {"totalCount": 0, "asCount": defaultdict(int)}
 
         node = rtree.search_exact(res[5])
-        count = 1
 
         if res[2] == "W":
             zOrig = res[3]
             # Withdraw: remove the corresponding node
             if not node is None and zOrig in node.data and len(node.data[zOrig]["path"]):
-                count = node.data[zOrig]["count"]
 
                 if spatialResolution:
+                    count = node.data[zOrig]["count"]
                     # Update count for above node
                     parent = findParent(node, zOrig) 
                     if parent is None:
@@ -128,9 +127,9 @@ def readupdates(filename, rtree, spatialResolution=1, af=4):
                     node.data[zOrig]["count"] = 0
 
                 else: 
-                    root.data[zOrig]["totalCount"] -= count
+                    root.data[zOrig]["totalCount"] -= 1
                     for asn in node.data[zOrig]["path"]:
-                        root.data[zOrig]["asCount"][asn] -= count 
+                        root.data[zOrig]["asCount"][asn] -= 1 
                     node.data[zOrig]["path"] = []
         
         else:
@@ -159,7 +158,8 @@ def readupdates(filename, rtree, spatialResolution=1, af=4):
                             root.data[zOrig]["asCount"][asn] -= count 
 
                 else:
-                    root.data[zOrig]["totalCount"] += count
+                    root.data[zOrig]["totalCount"] += 1
+                    count = 1
 
                 # Update the ASes counts
                 node.data[zOrig] = {"path": set(sPath.split(" ")), "count": count}
@@ -168,7 +168,11 @@ def readupdates(filename, rtree, spatialResolution=1, af=4):
 
             else:
                 #Update node path and counts
-                count = node.data[zOrig]["count"]
+                if spatialResolution:
+                    count = node.data[zOrig]["count"]
+                else:
+                    count = 1
+
                 for asn in node.data[zOrig]["path"]:
                     root.data[zOrig]["asCount"][asn] -= count
 
