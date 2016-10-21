@@ -219,8 +219,9 @@ def computeSimhash(rtree, pool, N, M, spatial, outFile=None):
     # For each RIB from our peers
     for peer, count in root.data.iteritems():
         totalCount = count["totalCount"]
-        if (totalCount <= 400000 and not spatial) or (totalCount <= 2000000000 and spatial):
+        if (totalCount <= 400000 and not spatial) or (totalCount <= 1000000000 and spatial):
             continue
+
 
         asCount = count["asCount"]
         totalCountList.append(totalCount)
