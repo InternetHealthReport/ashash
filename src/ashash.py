@@ -14,7 +14,8 @@ import hashlib
 import cPickle as pickle
 from multiprocessing import Pool
 import mmh3
-
+import json
+import networkx as nx
 
 def findParent(node, zOrig):
     parent = node.parent
@@ -26,11 +27,15 @@ def findParent(node, zOrig):
         return findParent(parent, zOrig)
 
 
-def readrib(ribfile, spatialResolution=1, af=4, rtree=None):
+def readrib(ribfile, spatialResolution=1, af=4, rtree=None, filter=None, plot=False):
     
     if rtree is None:
         rtree = radix.Radix() 
         root = rtree.add("0.0.0.0/0")
+
+    g = None
+    if plot:
+        g = nx.Graph()
 
     p1 = Popen(["bgpdump", "-m", "-v", "-t", "change", ribfile], stdout=PIPE, bufsize=-1)
 
@@ -49,8 +54,23 @@ def readrib(ribfile, spatialResolution=1, af=4, rtree=None):
         if not zOrig in root.data:
             root.data[zOrig] = {"totalCount": 0, "asCount": defaultdict(int)}
 
+        path = sPath.split(" ")
+        # Check if the origin AS is in the filter:
+        if not filter is None:
+            try:
+                origAS = int(path[-1])
+                if not origAS in filter:
+                    continue
+            except ValueError:
+                # TODO: handle cases for origin from a set of ASs?
+                continue
+
         node = rtree.add(zPfx)
-        node.data[zOrig] = {"path": set(sPath.split(" ")), "count": 0}
+        node.data[zOrig] = {"path": set(path), "count": 0}
+        if plot:
+            path = sPath.split(" ")
+            for i in range(len(path)-1): 
+                g.add_edge(path[i], path[i+1])
 
         count = 1
         if spatialResolution:
@@ -81,7 +101,7 @@ def readrib(ribfile, spatialResolution=1, af=4, rtree=None):
     return rtree
 
 
-def readupdates(filename, rtree, spatialResolution=1, af=4):
+def readupdates(filename, rtree, spatialResolution=1, af=4, filter=None):
 
     p1 = Popen(["bgpdump", "-m", "-v", filename],  stdout=PIPE, bufsize=-1)
     root = rtree.search_exact("0.0.0.0/0")
@@ -102,6 +122,7 @@ def readupdates(filename, rtree, spatialResolution=1, af=4):
             root.data[res[3]] = {"totalCount": 0, "asCount": defaultdict(int)}
 
         node = rtree.search_exact(res[5])
+
 
         if res[2] == "W":
             zOrig = res[3]
@@ -134,6 +155,33 @@ def readupdates(filename, rtree, spatialResolution=1, af=4):
         
         else:
             zTd, zDt, zS, zOrig, zAS, zPfx, sPath, zPro, zOr, z0, z1, z2, z3, z4, z5 = res
+
+            path = sPath.split(" ")
+            # Check if the origin AS is in the filter:
+            if not filter is None:
+                # Check if the prefixes has been announced by filtered ASs or
+                # if the origin AS is in the filter 
+                
+                covered = True
+                filteredOrig = True
+
+                if node is None and rtree.search_best(res[5]).prefixlen==0:
+                    # No peer has seen this prefix
+                    # And it is not covered by known prefixes
+                    covered = False
+
+                try:
+                    origAS = int(path[-1])
+                    if not origAS in filter:
+                        filteredOrig = False
+                except ValueError:
+                    # TODO: handle cases for origin from a set of ASs?
+                    filteredOrig = False
+
+                if not covered and not filteredOrig:
+                    continue
+
+
             # Announce:
             if node is None or not zOrig in node.data or not len(node.data[zOrig]["path"]):
                 # Add a new node 
@@ -162,7 +210,7 @@ def readupdates(filename, rtree, spatialResolution=1, af=4):
                     count = 1
 
                 # Update the ASes counts
-                node.data[zOrig] = {"path": set(sPath.split(" ")), "count": count}
+                node.data[zOrig] = {"path": set(path), "count": count}
                 for asn in node.data[zOrig]["path"]:
                     root.data[zOrig]["asCount"][asn] += count 
 
@@ -176,7 +224,7 @@ def readupdates(filename, rtree, spatialResolution=1, af=4):
                 for asn in node.data[zOrig]["path"]:
                     root.data[zOrig]["asCount"][asn] -= count
 
-                node.data[zOrig]["path"] = set(sPath.split(" "))
+                node.data[zOrig]["path"] = set(path)
                 for asn in node.data[zOrig]["path"]:
                     root.data[zOrig]["asCount"][asn] += count
 
@@ -211,17 +259,20 @@ def sketching(asProb, pool, N, M):
     return dict(zip(sketches.keys(), hashes)), sketches
 
 
-def computeSimhash(rtree, pool, N, M, spatial, outFile=None):
-
+def computeCentrality(rtree, spatial, outFile=None):
     root = rtree.search_exact("0.0.0.0/0")
     asProb = defaultdict(list)
     totalCountList = []
     # For each RIB from our peers
     for peer, count in root.data.iteritems():
         totalCount = count["totalCount"]
-        if (totalCount <= 400000 and not spatial) or (totalCount <= 1000000000 and spatial):
-            continue
 
+        if filter is None:
+            # If there is no filter we want only full feeds
+            if (totalCount <= 400000 and not spatial) or (totalCount <= 1000000000 and spatial):
+                continue
+        elif totalCount == 0:
+            continue
 
         asCount = count["asCount"]
         totalCountList.append(totalCount)
@@ -231,6 +282,7 @@ def computeSimhash(rtree, pool, N, M, spatial, outFile=None):
 
     if len(totalCountList) == 0:
         # There is no peers?
+        sys.stderr.write("Warning: no peers!")
         return None, None
 
     asAggProb = {}
@@ -238,12 +290,22 @@ def computeSimhash(rtree, pool, N, M, spatial, outFile=None):
         mu = np.median(problist)
         asAggProb[asn] = mu
 
-    sys.stdout.write("%s/%s peers, %s ASN, %s prefixes per peers, " % (len(totalCountList), 
+    if spatial:
+        sys.stdout.write("%s/%s peers, %s ASN, %s addresses per peers, " % (len(totalCountList), 
+            len(root.data), len(asProb), np.mean(totalCountList)))
+    else:
+        sys.stdout.write("%s/%s peers, %s ASN, %s prefixes per peers, " % (len(totalCountList), 
             len(root.data), len(asProb), np.mean(totalCountList)))
 
     if not outFile is None:
         outFile.write("%s | %s | %s | %s | " % (len(totalCountList), len(root.data), len(asProb), np.mean(totalCountList)))
 
+    return asAggProb
+
+
+def computeSimhash(rtree, pool, N, M, spatial, outFile=None, filter=None):
+    # get AS centrality
+    asAggProb = computeCentrality(rtree, spatial, outFile)
     # sketching
     return sketching(asAggProb, pool, N, M)
 
@@ -266,7 +328,7 @@ def compareSimhash(prevHash, curHash, prevSketches, currSketches, minVotes,  dis
                         prevProb = prevSketches[seed][m][asn]
                     diff[asn] = currProb-prevProb
 
-    anomalousAsn = [(asn, count, diff[asn]) for asn, count in votes.iteritems() if count >= minVotes]
+    anomalousAsn = [(asn, count, diff[asn]) for asn, count in votes.iteritems() if count >= minVotes and diff[asn]]
 
     return anomalousAsn, nbAnomalousSketches, cumDistance
 
@@ -280,6 +342,7 @@ if __name__ == "__main__":
     parser.add_argument("-r","--minVoteRatio", help="Minimum ratio of sketches to detect anomalies (should be between 0 and 1)", type=float, default=0.5)
     parser.add_argument("-p", "--proc", help="number of processes", type=int)
     parser.add_argument("-s", "--spatial", help="spatial resolution (0 for prefix, 1 for address)", type=int, default=1)
+    parser.add_argument("-f", "--filter", help="Filter: list of ASNs to monitor", type=str, default=None)
     parser.add_argument("--plot", help="plot figures", action="store_true")
     parser.add_argument("ribs", help="RIBS files")
     parser.add_argument("updates", help="UPDATES files", nargs="+")
@@ -288,6 +351,14 @@ if __name__ == "__main__":
 
     if args.proc is None:
         args.proc = args.N
+
+    if not args.filter is None:
+        filter = json.loads(args.filter)
+        if isinstance(filter, int):
+            filter = [filter]
+        elif not isinstance(filter, list):
+            sys.stderr.write("Filter: Wrong format! Should be a list of ASNs (e.g. [1,2,3]) or a single ASN.")
+            sys.exit()
 
     try:
         os.makedirs(os.path.dirname(args.output))
@@ -300,16 +371,22 @@ if __name__ == "__main__":
     # read rib files
     rib_files = glob.glob(args.ribs)
     if len(rib_files)==0:
-        sys.stderr.write("Files not found!\n")
+        sys.stderr.write("Files not found! (%s)\n" % args.ribs)
         sys.exit()
 
     rib_files.sort()
     
     rtree = None
     for ribfile in rib_files:
-        rtree = readrib(ribfile, args.spatial, args.af, rtree)
+        rtree = readrib(ribfile, args.spatial, args.af, rtree, filter, args.plot)
 
-    prevHash, prevSketches = computeSimhash(rtree, p, args.N, args.M, args.spatial)
+        if args.plot:
+            # Add centrality values
+            prob = computeCentrality(rtree, args.spatial)
+            nx.set_node_attributes(g, "centrality", prob)
+            nx.write_gexf(g, args.output+"/graph.gexf")
+
+    prevHash, prevSketches = computeSimhash(rtree, p, args.N, args.M, args.spatial, filter=filter)
 
     # initialisation for the figures and output
     hashHistory = {"date":[], "hash":[], "distance":[], "reportedASN":[]}
@@ -328,10 +405,10 @@ if __name__ == "__main__":
             filename = fi.rpartition("/")[2]
             date = filename.split(".")
             sys.stdout.write("\r %s:%s " % (date[1], date[2]))
-            rtree = readupdates(fi, rtree, args.spatial, args.af)
+            rtree = readupdates(fi, rtree, args.spatial, args.af, filter)
 
             outFile.write("%s:%s | " % (date[1], date[2]) )
-            currHash, currSketches = computeSimhash(rtree, p, args.N, args.M, args.spatial, outFile)
+            currHash, currSketches = computeSimhash(rtree, p, args.N, args.M, args.spatial, outFile, filter)
 
             if currHash is None:
                 anomalousAsn = []
