@@ -98,7 +98,7 @@ def readrib(ribfile, spatialResolution=1, af=4, rtree=None, filter=None, plot=Fa
         for asn in node.data[zOrig]["path"]:
             root.data[zOrig]["asCount"][asn] += count
     
-    return rtree
+    return rtree, g
 
 
 def readupdates(filename, rtree, spatialResolution=1, af=4, filter=None):
@@ -287,7 +287,7 @@ def computeCentrality(rtree, spatial, outFile=None):
 
     asAggProb = {}
     for asn, problist in asProb.iteritems():
-        mu = np.median(problist)
+        mu = float(np.median(problist))
         asAggProb[asn] = mu
 
     if spatial:
@@ -378,7 +378,7 @@ if __name__ == "__main__":
     
     rtree = None
     for ribfile in rib_files:
-        rtree = readrib(ribfile, args.spatial, args.af, rtree, filter, args.plot)
+        rtree, g = readrib(ribfile, args.spatial, args.af, rtree, filter, args.plot)
 
         if args.plot:
             # Add centrality values
