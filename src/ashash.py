@@ -27,14 +27,13 @@ def findParent(node, zOrig):
         return findParent(parent, zOrig)
 
 
-def readrib(ribfile, spatialResolution=1, af=4, rtree=None, filter=None, plot=False):
+def readrib(ribfile, spatialResolution=1, af=4, rtree=None, filter=None, plot=False, g=None):
     
     if rtree is None:
         rtree = radix.Radix() 
         root = rtree.add("0.0.0.0/0")
 
-    g = None
-    if plot:
+    if plot and g is None:
         g = nx.Graph()
 
     p1 = Popen(["bgpdump", "-m", "-v", "-t", "change", ribfile], stdout=PIPE, bufsize=-1)
@@ -101,7 +100,7 @@ def readrib(ribfile, spatialResolution=1, af=4, rtree=None, filter=None, plot=Fa
     return rtree, g
 
 
-def readupdates(filename, rtree, spatialResolution=1, af=4, filter=None):
+def readupdates(filename, rtree, spatialResolution=1, af=4, filter=None, plot=False, g=None):
 
     p1 = Popen(["bgpdump", "-m", "-v", filename],  stdout=PIPE, bufsize=-1)
     root = rtree.search_exact("0.0.0.0/0")
@@ -144,14 +143,27 @@ def readupdates(filename, rtree, spatialResolution=1, af=4, filter=None):
 
                     for asn in node.data[zOrig]["path"]:
                         root.data[zOrig]["asCount"][asn] -= count 
-                    node.data[zOrig]["path"] = []
-                    node.data[zOrig]["count"] = 0
 
                 else: 
                     root.data[zOrig]["totalCount"] -= 1
                     for asn in node.data[zOrig]["path"]:
                         root.data[zOrig]["asCount"][asn] -= 1 
-                    node.data[zOrig]["path"] = []
+
+
+                if plot:
+                    # Remove edges in the graph
+                    path = [node.data[zOrig]["path"]]
+                    for asn in path:
+                        allZero = True
+                        for peer in root.data.keys():
+                            if root.data[peer]["asCount"][asn]!=0:
+                                allZero = False
+                                break
+                            if allZero and asn in g:
+                                g.remove_node(asn)
+
+                node.data[zOrig]["path"] = []
+                node.data[zOrig]["count"] = 0
         
         else:
             zTd, zDt, zS, zOrig, zAS, zPfx, sPath, zPro, zOr, z0, z1, z2, z3, z4, z5 = res
@@ -223,10 +235,23 @@ def readupdates(filename, rtree, spatialResolution=1, af=4, filter=None):
 
                 for asn in node.data[zOrig]["path"]:
                     root.data[zOrig]["asCount"][asn] -= count
+                    if plot and root.data[zOrig]["asCount"][asn]==0:
+                        allZero = True
+                        for peer in root.data.keys():
+                            if root.data[peer]["asCount"][asn]!=0:
+                                allZero = False
+                                break
+                            if allZero and asn in g:
+                                g.remove_node(asn)
 
                 node.data[zOrig]["path"] = set(path)
                 for asn in node.data[zOrig]["path"]:
                     root.data[zOrig]["asCount"][asn] += count
+
+            if plot:
+                # add new edges
+                for i in range(len(path)-1): 
+                    g.add_edge(path[i], path[i+1])
 
     return rtree
 
@@ -263,6 +288,10 @@ def computeCentrality(rtree, spatial, outFile=None):
     root = rtree.search_exact("0.0.0.0/0")
     asProb = defaultdict(list)
     totalCountList = []
+    asList = set()
+    for peer, count in root.data.iteritems():
+        asList.update(count["asCount"].iterkeys())
+
     # For each RIB from our peers
     for peer, count in root.data.iteritems():
         totalCount = count["totalCount"]
@@ -277,8 +306,8 @@ def computeCentrality(rtree, spatial, outFile=None):
         asCount = count["asCount"]
         totalCountList.append(totalCount)
 
-        for asn, nbPath in asCount.iteritems():
-            asProb[asn].append(nbPath/float(totalCount))
+        for asn in asList:
+            asProb[asn].append(asCount[asn]/float(totalCount))
 
     if len(totalCountList) == 0:
         # There is no peers?
@@ -292,11 +321,12 @@ def computeCentrality(rtree, spatial, outFile=None):
 
     if spatial:
         sys.stdout.write("%s/%s peers, %s ASN, %s addresses per peers, " % (len(totalCountList), 
-            len(root.data), len(asProb), np.mean(totalCountList)))
+            len(root.data), len(asList), np.mean(totalCountList)))
     else:
         sys.stdout.write("%s/%s peers, %s ASN, %s prefixes per peers, " % (len(totalCountList), 
-            len(root.data), len(asProb), np.mean(totalCountList)))
-
+            len(root.data), len(asList), np.mean(totalCountList)))
+    print root.data.keys()
+    print asList
     if not outFile is None:
         outFile.write("%s | %s | %s | %s | " % (len(totalCountList), len(root.data), len(asProb), np.mean(totalCountList)))
 
@@ -377,14 +407,15 @@ if __name__ == "__main__":
     rib_files.sort()
     
     rtree = None
+    g = None
     for ribfile in rib_files:
-        rtree, g = readrib(ribfile, args.spatial, args.af, rtree, filter, args.plot)
+        rtree, g = readrib(ribfile, args.spatial, args.af, rtree, filter, args.plot, g)
 
         if args.plot:
             # Add centrality values
             prob = computeCentrality(rtree, args.spatial)
             nx.set_node_attributes(g, "centrality", prob)
-            nx.write_gexf(g, args.output+"/graph.gexf")
+            nx.write_gexf(g, args.output+"/graph_start.gexf")
 
     prevHash, prevSketches = computeSimhash(rtree, p, args.N, args.M, args.spatial, filter=filter)
 
@@ -405,7 +436,7 @@ if __name__ == "__main__":
             filename = fi.rpartition("/")[2]
             date = filename.split(".")
             sys.stdout.write("\r %s:%s " % (date[1], date[2]))
-            rtree = readupdates(fi, rtree, args.spatial, args.af, filter)
+            rtree = readupdates(fi, rtree, args.spatial, args.af, filter, args.plot, g)
 
             outFile.write("%s:%s | " % (date[1], date[2]) )
             currHash, currSketches = computeSimhash(rtree, p, args.N, args.M, args.spatial, outFile, filter)
@@ -435,6 +466,12 @@ if __name__ == "__main__":
                 prevSketches = currSketches
 
     if args.plot :
+
+        # Add centrality values
+        prob = computeCentrality(rtree, args.spatial)
+        prob = {asn:val for asn, val in prob.iteritems() if asn in g}
+        nx.set_node_attributes(g, "centrality", prob)
+        nx.write_gexf(g, args.output+"/graph_end.gexf")
         # pickle.dump(hashHistory, open("distance.pickle","wb"))
 
         plt.figure(figsize=(10,4))
