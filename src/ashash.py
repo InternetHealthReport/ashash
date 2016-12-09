@@ -50,10 +50,14 @@ def readrib(ribfile, spatialResolution=1, af=4, rtree=None, filter=None, plot=Fa
         if zPfx == "0.0.0.0/0":
             continue
 
+        path = sPath.split(" ")
         if not zOrig in root.data:
             root.data[zOrig] = {"totalCount": 0, "asCount": defaultdict(int)}
 
-        path = sPath.split(" ")
+            if plot:
+                # Keep a list of BGP peers
+                root.data[zOrig]["peerASN"] = path[0]
+
         # Check if the origin AS is in the filter:
         if not filter is None:
             try:
@@ -104,6 +108,7 @@ def readupdates(filename, rtree, spatialResolution=1, af=4, filter=None, plot=Fa
 
     p1 = Popen(["bgpdump", "-m", "-v", filename],  stdout=PIPE, bufsize=-1)
     root = rtree.search_exact("0.0.0.0/0")
+    stats = {"update": 0, "withdraw": 0, "pathLen": [], "prefixLen": [], "originAS":set()}
     
     for line in p1.stdout:
         res = line[:-1].split('|',15)
@@ -127,6 +132,7 @@ def readupdates(filename, rtree, spatialResolution=1, af=4, filter=None, plot=Fa
             zOrig = res[3]
             # Withdraw: remove the corresponding node
             if not node is None and zOrig in node.data and len(node.data[zOrig]["path"]):
+                stats["withdraw"] += 1
 
                 if spatialResolution:
                     count = node.data[zOrig]["count"]
@@ -195,6 +201,10 @@ def readupdates(filename, rtree, spatialResolution=1, af=4, filter=None, plot=Fa
 
 
             # Announce:
+            stats["update"] += 1
+            stats["pathLen"].append(len(path))
+            stats["originAS"].add(path[-1])
+            stats["prefixLen"].append(int(sPath.rpartition("/")[2]))
             if node is None or not zOrig in node.data or not len(node.data[zOrig]["path"]):
                 # Add a new node 
 
@@ -253,7 +263,7 @@ def readupdates(filename, rtree, spatialResolution=1, af=4, filter=None, plot=Fa
                 for i in range(len(path)-1): 
                     g.add_edge(path[i], path[i+1])
 
-    return rtree
+    return rtree, stats
 
 
 def hashfunc(x):
@@ -325,8 +335,7 @@ def computeCentrality(rtree, spatial, outFile=None):
     else:
         sys.stdout.write("%s/%s peers, %s ASN, %s prefixes per peers, " % (len(totalCountList), 
             len(root.data), len(asList), np.mean(totalCountList)))
-    print root.data.keys()
-    print asList
+
     if not outFile is None:
         outFile.write("%s | %s | %s | %s | " % (len(totalCountList), len(root.data), len(asProb), np.mean(totalCountList)))
 
@@ -415,6 +424,13 @@ if __name__ == "__main__":
             # Add centrality values
             prob = computeCentrality(rtree, args.spatial)
             nx.set_node_attributes(g, "centrality", prob)
+            # Set nodes color (peers are blue and filtered ASN are red)
+            root = rtree.search_exact("0.0.0.0/0")
+            nodeColor = {data["peerASN"]:"b" for peer, data in root.data.iteritems()}
+            if not filter is None:
+                for asn in filter:
+                    nodeColor[str(asn)] = "r"
+            nx.set_node_attributes(g, "color", nodeColor) 
             nx.write_gexf(g, args.output+"/graph_start.gexf")
 
     prevHash, prevSketches = computeSimhash(rtree, p, args.N, args.M, args.spatial, filter=filter)
@@ -436,7 +452,7 @@ if __name__ == "__main__":
             filename = fi.rpartition("/")[2]
             date = filename.split(".")
             sys.stdout.write("\r %s:%s " % (date[1], date[2]))
-            rtree = readupdates(fi, rtree, args.spatial, args.af, filter, args.plot, g)
+            rtree, updateStats = readupdates(fi, rtree, args.spatial, args.af, filter, args.plot, g)
 
             outFile.write("%s:%s | " % (date[1], date[2]) )
             currHash, currSketches = computeSimhash(rtree, p, args.N, args.M, args.spatial, outFile, filter)
@@ -471,6 +487,14 @@ if __name__ == "__main__":
         prob = computeCentrality(rtree, args.spatial)
         prob = {asn:val for asn, val in prob.iteritems() if asn in g}
         nx.set_node_attributes(g, "centrality", prob)
+        # Set nodes color (peers are blue and filtered ASN are red)
+        root = rtree.search_exact("0.0.0.0/0")
+        nodeColor = {data["peerASN"]:"b" for peer, data in root.data.iteritems() if data["peerASN"] in g}
+        if not filter is None:
+            for asn in filter:
+                if str(asn) in g:
+                    nodeColor[str(asn)] = "r"
+        nx.set_node_attributes(g, "color", nodeColor)
         nx.write_gexf(g, args.output+"/graph_end.gexf")
         # pickle.dump(hashHistory, open("distance.pickle","wb"))
 
@@ -487,6 +511,3 @@ if __name__ == "__main__":
         plt.ylabel("Number of reported ASN")
         plt.tight_layout()
         plt.savefig("reportedASN.eps")
-
-    #TODO dump radix if needed
-
