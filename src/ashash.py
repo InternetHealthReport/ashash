@@ -6,8 +6,10 @@ from subprocess import Popen, PIPE
 import glob
 import radix
 from collections import defaultdict
+from collections import deque
 from datetime import datetime
 import numpy as np
+from scipy import stats
 import simhash
 import matplotlib.pylab as plt
 import hashlib
@@ -108,7 +110,7 @@ def readupdates(filename, rtree, spatialResolution=1, af=4, filter=None, plot=Fa
 
     p1 = Popen(["bgpdump", "-m", "-v", filename],  stdout=PIPE, bufsize=-1)
     root = rtree.search_exact("0.0.0.0/0")
-    stats = {"update": 0, "withdraw": 0, "pathLen": [], "prefixLen": [], "originAS":set()}
+    stats = {"announce": 0, "withdraw": 0, "pathLen": [], "prefixLen": [], "originAS":set()}
     
     for line in p1.stdout:
         res = line[:-1].split('|',15)
@@ -158,8 +160,7 @@ def readupdates(filename, rtree, spatialResolution=1, af=4, filter=None, plot=Fa
 
                 if plot:
                     # Remove edges in the graph
-                    path = [node.data[zOrig]["path"]]
-                    for asn in path:
+                    for asn in node.data[zOrig]["path"]:
                         allZero = True
                         for peer in root.data.keys():
                             if root.data[peer]["asCount"][asn]!=0:
@@ -201,10 +202,10 @@ def readupdates(filename, rtree, spatialResolution=1, af=4, filter=None, plot=Fa
 
 
             # Announce:
-            stats["update"] += 1
+            stats["announce"] += 1
             stats["pathLen"].append(len(path))
             stats["originAS"].add(path[-1])
-            stats["prefixLen"].append(int(sPath.rpartition("/")[2]))
+            stats["prefixLen"].append(int(zPfx.rpartition("/")[2]))
             if node is None or not zOrig in node.data or not len(node.data[zOrig]["path"]):
                 # Add a new node 
 
@@ -269,6 +270,7 @@ def readupdates(filename, rtree, spatialResolution=1, af=4, filter=None, plot=Fa
 def hashfunc(x):
     return int(hashlib.sha512(x).hexdigest(), 16)
 
+
 def sketchesSimhash(sketches):
 
     hashes = {}
@@ -277,15 +279,17 @@ def sketchesSimhash(sketches):
 
     return hashes
 
+
 def sketchSet():
     return defaultdict(dict)
 
-def sketching(asProb, pool, N, M):
 
+def sketching(asAggProb, pool, N, M):
+    print asAggProb
     seeds = [2**i for i in range(1,N+1)]
     sketches = defaultdict(sketchSet) 
     for seed in seeds:
-        for asn, prob in asProb.iteritems():
+        for asn, prob in asAggProb.iteritems():
             sketches[seed][mmh3.hash128(asn,seed=seed)%M][asn] = prob
 
     # compute the simhash for each hash function
@@ -293,6 +297,9 @@ def sketching(asProb, pool, N, M):
 
     return dict(zip(sketches.keys(), hashes)), sketches
 
+
+def aggProb(asProb, trim=0.25):
+    return {asn:float(stats.trim_mean(problist, trim))for asn, problist in asProb.iteritems()}
 
 def computeCentrality(rtree, spatial, outFile=None):
     root = rtree.search_exact("0.0.0.0/0")
@@ -324,10 +331,7 @@ def computeCentrality(rtree, spatial, outFile=None):
         sys.stderr.write("Warning: no peers!")
         return None, None
 
-    asAggProb = {}
-    for asn, problist in asProb.iteritems():
-        mu = float(np.median(problist))
-        asAggProb[asn] = mu
+    asAggProb = aggProb(asProb)
 
     if spatial:
         sys.stdout.write("%s/%s peers, %s ASN, %s addresses per peers, " % (len(totalCountList), 
@@ -339,14 +343,15 @@ def computeCentrality(rtree, spatial, outFile=None):
     if not outFile is None:
         outFile.write("%s | %s | %s | %s | " % (len(totalCountList), len(root.data), len(asProb), np.mean(totalCountList)))
 
-    return asAggProb
+    return asAggProb, asProb
 
 
 def computeSimhash(rtree, pool, N, M, spatial, outFile=None, filter=None):
     # get AS centrality
-    asAggProb = computeCentrality(rtree, spatial, outFile)
+    asAggProb, asProb = computeCentrality(rtree, spatial, outFile)
     # sketching
-    return sketching(asAggProb, pool, N, M)
+    res = sketching(asAggProb, pool, N, M)
+    return res, asProb 
 
 
 def compareSimhash(prevHash, curHash, prevSketches, currSketches, minVotes,  distThresh=3):
@@ -379,6 +384,7 @@ if __name__ == "__main__":
     parser.add_argument("-M", help="number of sketches per hash function", type=int, default=64)
     parser.add_argument("-d","--distThresh", help="simhash distance threshold", type=int, default=3)
     parser.add_argument("-r","--minVoteRatio", help="Minimum ratio of sketches to detect anomalies (should be between 0 and 1)", type=float, default=0.5)
+    parser.add_argument("-H","--historyDuration", help="Time duration of the history for computing the reference (mult 15min)", type=int, default=4)
     parser.add_argument("-p", "--proc", help="number of processes", type=int)
     parser.add_argument("-s", "--spatial", help="spatial resolution (0 for prefix, 1 for address)", type=int, default=1)
     parser.add_argument("-f", "--filter", help="Filter: list of ASNs to monitor", type=str, default=None)
@@ -422,22 +428,27 @@ if __name__ == "__main__":
 
         if args.plot:
             # Add centrality values
-            prob = computeCentrality(rtree, args.spatial)
-            nx.set_node_attributes(g, "centrality", prob)
+            asAggProb, asProb = computeCentrality(rtree, args.spatial)
+            nx.set_node_attributes(g, "centrality", asAggProb)
             # Set nodes color (peers are blue and filtered ASN are red)
             root = rtree.search_exact("0.0.0.0/0")
-            nodeColor = {data["peerASN"]:"b" for peer, data in root.data.iteritems()}
+            nodeColor = {data["peerASN"]:"b" for peer, data in root.data.iteritems() if data["peerASN"] in g}
             if not filter is None:
                 for asn in filter:
                     nodeColor[str(asn)] = "r"
             nx.set_node_attributes(g, "color", nodeColor) 
             nx.write_gexf(g, args.output+"/graph_start.gexf")
 
-    prevHash, prevSketches = computeSimhash(rtree, p, args.N, args.M, args.spatial, filter=filter)
+    (currHash, currSketches), currAsProb = computeSimhash(rtree, p, args.N, args.M, args.spatial, filter=filter)
 
     # initialisation for the figures and output
     hashHistory = {"date":[], "hash":[], "distance":[], "reportedASN":[]}
     outFile = open(args.output+"/results_ip.txt","w")
+    refAsProb = defaultdict(lambda : deque(maxlen=args.historyDuration*len(root.data)))
+
+    # Update the reference
+    for asn, prob in currAsProb.iteritems():
+        refAsProb[asn].extend(prob)
 
     # read update files
     for updates in args.updates:
@@ -454,15 +465,19 @@ if __name__ == "__main__":
             sys.stdout.write("\r %s:%s " % (date[1], date[2]))
             rtree, updateStats = readupdates(fi, rtree, args.spatial, args.af, filter, args.plot, g)
 
-            outFile.write("%s:%s | " % (date[1], date[2]) )
-            currHash, currSketches = computeSimhash(rtree, p, args.N, args.M, args.spatial, outFile, filter)
+            outFile.write("%s:%s | %s | %s | %s | %s | %s | " % (date[1], date[2], updateStats["announce"], \
+                    updateStats["withdraw"], np.median(updateStats["prefixLen"]), \
+                    np.median(updateStats["pathLen"]), len(updateStats["originAS"]) ) )
+            (currHash, currSketches), currAsProb = computeSimhash(rtree, p, args.N, args.M, args.spatial, outFile, filter)
 
             if currHash is None:
                 anomalousAsn = []
                 nbAnoSketch =  np.nan
                 distance = np.nan
             else:
-                anomalousAsn, nbAnoSketch, distance = compareSimhash(prevHash, currHash, prevSketches, currSketches, int(args.N*args.minVoteRatio), args.distThresh)
+                aggProb = aggProb(refAsProb)
+                refHash, refSketches = sketching(aggProb, p, args.N, args.M)
+                anomalousAsn, nbAnoSketch, distance = compareSimhash(refHash, currHash, refSketches, currSketches, int(args.N*args.minVoteRatio), args.distThresh)
 
             if args.plot:
                 hashHistory["date"].append( datetime.strptime(date[1]+date[2], "%Y%m%d%H%M"))
@@ -478,13 +493,15 @@ if __name__ == "__main__":
             outFile.flush()
         
             if not currHash is None:
-                prevHash = currHash
-                prevSketches = currSketches
+                # Update the reference
+                for asn, prob in currAsProb.iteritems():
+                    refAsProb[asn].extend(prob)
+
 
     if args.plot :
 
         # Add centrality values
-        prob = computeCentrality(rtree, args.spatial)
+        asAggProb, asProb = computeCentrality(rtree, args.spatial)
         prob = {asn:val for asn, val in prob.iteritems() if asn in g}
         nx.set_node_attributes(g, "centrality", prob)
         # Set nodes color (peers are blue and filtered ASN are red)
