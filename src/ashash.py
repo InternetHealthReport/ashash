@@ -11,6 +11,8 @@ from datetime import datetime
 import numpy as np
 from scipy import stats
 import simhash
+import matplotlib as mpl
+mpl.use('Agg')
 import matplotlib.pylab as plt
 import hashlib
 import cPickle as pickle
@@ -34,6 +36,8 @@ def readrib(ribfile, spatialResolution=1, af=4, rtree=None, filter=None, plot=Fa
     if rtree is None:
         rtree = radix.Radix() 
         root = rtree.add("0.0.0.0/0")
+    else:
+        root = rtree.search_exact("0.0.0.0/0")
 
     if plot and g is None:
         g = nx.Graph()
@@ -63,9 +67,31 @@ def readrib(ribfile, spatialResolution=1, af=4, rtree=None, filter=None, plot=Fa
         # Check if the origin AS is in the filter:
         if not filter is None:
             try:
-                origAS = int(path[-1])
-                if not origAS in filter:
-                    continue
+                # Check if the origin AS is in the filter:
+                if not filter is None:
+                    # Check if the prefixes has been announced by filtered ASs or
+                    # if the origin AS is in the filter 
+                    
+                    covered = True
+                    filteredOrig = True
+                    node = rtree.search_exact(zPfx)
+
+                    if node is None and rtree.search_best(zPfx).prefixlen==0:
+                        # No peer has seen this prefix
+                        # And it is not covered by known prefixes
+                        covered = False
+
+                    try:
+                        origAS = int(path[-1])
+                        if not origAS in filter:
+                            filteredOrig = False
+                    except ValueError:
+                        # TODO: handle cases for origin from a set of ASs?
+                        filteredOrig = False
+
+                    if not covered and not filteredOrig:
+                        continue
+
             except ValueError:
                 # TODO: handle cases for origin from a set of ASs?
                 continue
@@ -200,6 +226,9 @@ def readupdates(filename, rtree, spatialResolution=1, af=4, filter=None, plot=Fa
                 if not covered and not filteredOrig:
                     continue
 
+                if plot and covered and not filteredOrig:
+                    print zPfx, sPath
+
 
             # Announce:
             stats["announce"] += 1
@@ -285,7 +314,6 @@ def sketchSet():
 
 
 def sketching(asAggProb, pool, N, M):
-    print asAggProb
     seeds = [2**i for i in range(1,N+1)]
     sketches = defaultdict(sketchSet) 
     for seed in seeds:
@@ -298,7 +326,7 @@ def sketching(asAggProb, pool, N, M):
     return dict(zip(sketches.keys(), hashes)), sketches
 
 
-def aggProb(asProb, trim=0.25):
+def aggregateCentrality(asProb, trim=0.1):
     return {asn:float(stats.trim_mean(problist, trim))for asn, problist in asProb.iteritems()}
 
 def computeCentrality(rtree, spatial, outFile=None):
@@ -331,7 +359,7 @@ def computeCentrality(rtree, spatial, outFile=None):
         sys.stderr.write("Warning: no peers!")
         return None, None
 
-    asAggProb = aggProb(asProb)
+    asAggProb = aggregateCentrality(asProb)
 
     if spatial:
         sys.stdout.write("%s/%s peers, %s ASN, %s addresses per peers, " % (len(totalCountList), 
@@ -404,6 +432,8 @@ if __name__ == "__main__":
         elif not isinstance(filter, list):
             sys.stderr.write("Filter: Wrong format! Should be a list of ASNs (e.g. [1,2,3]) or a single ASN.")
             sys.exit()
+    else:
+        filter = None
 
     try:
         os.makedirs(os.path.dirname(args.output))
@@ -425,6 +455,9 @@ if __name__ == "__main__":
     g = None
     for ribfile in rib_files:
         rtree, g = readrib(ribfile, args.spatial, args.af, rtree, filter, args.plot, g)
+        if not filter is None:
+            # Need a second pass to account for delegated prefixes
+            rtree, g = readrib(ribfile, args.spatial, args.af, rtree, filter, args.plot, g)
 
         if args.plot:
             # Add centrality values
@@ -444,6 +477,7 @@ if __name__ == "__main__":
     # initialisation for the figures and output
     hashHistory = {"date":[], "hash":[], "distance":[], "reportedASN":[]}
     outFile = open(args.output+"/results_ip.txt","w")
+    root = rtree.search_exact("0.0.0.0/0")
     refAsProb = defaultdict(lambda : deque(maxlen=args.historyDuration*len(root.data)))
 
     # Update the reference
@@ -475,7 +509,7 @@ if __name__ == "__main__":
                 nbAnoSketch =  np.nan
                 distance = np.nan
             else:
-                aggProb = aggProb(refAsProb)
+                aggProb = aggregateCentrality(refAsProb)
                 refHash, refSketches = sketching(aggProb, p, args.N, args.M)
                 anomalousAsn, nbAnoSketch, distance = compareSimhash(refHash, currHash, refSketches, currSketches, int(args.N*args.minVoteRatio), args.distThresh)
 
@@ -502,7 +536,7 @@ if __name__ == "__main__":
 
         # Add centrality values
         asAggProb, asProb = computeCentrality(rtree, args.spatial)
-        prob = {asn:val for asn, val in prob.iteritems() if asn in g}
+        prob = {asn:val for asn, val in asAggProb.iteritems() if asn in g}
         nx.set_node_attributes(g, "centrality", prob)
         # Set nodes color (peers are blue and filtered ASN are red)
         root = rtree.search_exact("0.0.0.0/0")
