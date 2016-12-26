@@ -515,7 +515,7 @@ if __name__ == "__main__":
         for fi in update_files:
             if bgpstream:
                 date = datetime.utcfromtimestamp(int(fi.rpartition(":")[2].partition(",")[0]))
-                date = "%s%s%s.%s%s" % (date.year, date.month, date.day, date.hour, date.minute)
+                date = ".%s%s%s.%s%s" % (date.year, date.month, date.day, date.hour, date.minute)
                 date = date.split(".")
             else:
                 filename = fi.rpartition("/")[2]
