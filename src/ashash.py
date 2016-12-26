@@ -516,10 +516,11 @@ if __name__ == "__main__":
             if bgpstream:
                 date = datetime.utcfromtimestamp(int(fi.rpartition(":")[2].partition(",")[0]))
                 date = "%s%s%s.%s%s" % (date.year, date.month, date.day, date.hour, date.minute)
+                date = date.split(".")
             else:
                 filename = fi.rpartition("/")[2]
+                date = filename.split(".")
 
-            date = filename.split(".")
             sys.stdout.write("\r %s:%s " % (date[1], date[2]))
             rtree, updateStats = readupdates(fi, rtree, args.spatial, args.af, filter, args.plot, g)
 
