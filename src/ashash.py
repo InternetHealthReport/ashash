@@ -32,7 +32,7 @@ def findParent(node, zOrig):
 
 
 def readrib(ribfile, spatialResolution=1, af=4, rtree=None, filter=None, plot=False, g=None):
-    
+    sys.stderr.write("Loading RIB files...") 
     if rtree is None:
         rtree = radix.Radix() 
         root = rtree.add("0.0.0.0/0")
@@ -42,7 +42,10 @@ def readrib(ribfile, spatialResolution=1, af=4, rtree=None, filter=None, plot=Fa
     if plot and g is None:
         g = nx.Graph()
 
-    p1 = Popen(["bgpdump", "-m", "-v", "-t", "change", ribfile], stdout=PIPE, bufsize=-1)
+    if ribfile.startswith("@bgpstream:"):
+        p1 = Popen(["bgpreader","-m", "-w",ribfile.rpartition(":")[2], "-p", "routeviews", "-c","route-views.linx", "-t","ribs"], stdout=PIPE)
+    else:
+        p1 = Popen(["bgpdump", "-m", "-v", "-t", "change", ribfile], stdout=PIPE, bufsize=-1)
 
     for line in p1.stdout: 
         zTd, zDt, zS, zOrig, zAS, zPfx, sPath, zPro, zOr, z0, z1, z2, z3, z4, z5 = line.split('|',16)
@@ -129,12 +132,16 @@ def readrib(ribfile, spatialResolution=1, af=4, rtree=None, filter=None, plot=Fa
         for asn in node.data[zOrig]["path"]:
             root.data[zOrig]["asCount"][asn] += count
     
+    sys.stderr.write("done!\n") 
     return rtree, g
 
 
 def readupdates(filename, rtree, spatialResolution=1, af=4, filter=None, plot=False, g=None):
 
-    p1 = Popen(["bgpdump", "-m", "-v", filename],  stdout=PIPE, bufsize=-1)
+    if ribfile.startswith("@bgpstream:"):
+        p1 = Popen(["bgpreader", "-m", "-w", filename.rpartition(":")[2], "-p", "routeviews", "-c", "route-views.linx", "-t", "updates"], stdout=PIPE)
+    else:
+        p1 = Popen(["bgpdump", "-m", "-v", filename],  stdout=PIPE, bufsize=-1)
     root = rtree.search_exact("0.0.0.0/0")
     stats = {"announce": 0, "withdraw": 0, "pathLen": [], "prefixLen": [], "originAS":set()}
     
@@ -409,7 +416,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-a","--af", help="address family (4, 6, or 0 for both)", type=int, default=4)
     parser.add_argument("-N", help="number of hash functions for sketching", type=int, default=16)
-    parser.add_argument("-M", help="number of sketches per hash function", type=int, default=64)
+    parser.add_argument("-M", help="number of sketches per hash function", type=int, default=128)
     parser.add_argument("-d","--distThresh", help="simhash distance threshold", type=int, default=3)
     parser.add_argument("-r","--minVoteRatio", help="Minimum ratio of sketches to detect anomalies (should be between 0 and 1)", type=float, default=0.5)
     parser.add_argument("-H","--historyDuration", help="Time duration of the history for computing the reference (mult 15min)", type=int, default=4)
@@ -444,12 +451,15 @@ if __name__ == "__main__":
     p=Pool(args.proc)
 		
     # read rib files
-    rib_files = glob.glob(args.ribs)
-    if len(rib_files)==0:
-        sys.stderr.write("Files not found! (%s)\n" % args.ribs)
-        sys.exit()
+    if args.ribs.startswith("@bgpstream:"):
+        rib_files = [args.ribs]
+    else:
+        rib_files = glob.glob(args.ribs)
+        if len(rib_files)==0:
+            sys.stderr.write("Files not found! (%s)\n" % args.ribs)
+            sys.exit()
 
-    rib_files.sort()
+        rib_files.sort()
     
     rtree = None
     g = None
@@ -487,15 +497,29 @@ if __name__ == "__main__":
     # read update files
     for updates in args.updates:
 		
-        update_files = glob.glob(updates)
+        bgpstream = False
+        if updates.startswith("@bgpstream:"):
+            bgpstream = True
+            w = updates.rpartition(":")[2].split(",")
+            ts,te = int(w[0]),int(w[1]) 
+            
+            update_files = ["@bgpstream:%s,%s" % (t, t+900) for t in range(ts, te, 900)]
+
+        else:
+            update_files = glob.glob(updates)
+            update_files.sort()
+
         if len(update_files)==0:
             sys.exit()
-			
-        update_files.sort()
 
         for fi in update_files:
-            filename = fi.rpartition("/")[2]
-            date = filename.split(".")
+            if bgpstream:
+                date = datetime.utcfromtimestamp(int(fi.rpartition(":")[2].partition(",")[0]))
+                date = "%s%s%s.%s%s" % (date.year, date.month, date.day, date.hour, date.minute)
+            else:
+                filename = fi.rpartition("/")[2]
+                date = filename.split(".")
+
             sys.stdout.write("\r %s:%s " % (date[1], date[2]))
             rtree, updateStats = readupdates(fi, rtree, args.spatial, args.af, filter, args.plot, g)
 
