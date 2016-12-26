@@ -17,6 +17,9 @@
 Both bgpdump and bgpstream are optional but you need at least one of them.
 
 ## Usage:
+
+The main program is **ashash.py** and it requires at least three arguments: a RIB dump, update dumps, and a directory to write the results.
+
 #### Example: monitoring the whole Internet from local files:
 ```
 python2 ashash.py /data/myRib.dump /data/myUpdates0.dump /data/myUpdates1.dump
