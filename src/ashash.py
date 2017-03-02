@@ -423,6 +423,7 @@ if __name__ == "__main__":
     parser.add_argument("-p", "--proc", help="number of processes", type=int)
     parser.add_argument("-s", "--spatial", help="spatial resolution (0 for prefix, 1 for address)", type=int, default=1)
     parser.add_argument("-f", "--filter", help="Filter: list of ASNs to monitor", type=str, default=None)
+    parser.add_argument("-w", "--window", help="Time window: time resolution in seconds (works only with  bgpstream)", type=int, default=900)
     parser.add_argument("--plot", help="plot figures", action="store_true")
     parser.add_argument("ribs", help="RIBS files")
     parser.add_argument("updates", help="UPDATES files", nargs="+")
@@ -503,7 +504,7 @@ if __name__ == "__main__":
             w = updates.rpartition(":")[2].split(",")
             ts,te = int(w[0]),int(w[1]) 
             
-            update_files = ["@bgpstream:%s,%s" % (t, t+900) for t in range(ts, te, 900)]
+            update_files = ["@bgpstream:%s,%s" % (t, t+args.window) for t in range(ts, te, args.window)]
 
         else:
             update_files = glob.glob(updates)
