@@ -5,7 +5,6 @@
 - py-radix
 - simhash
 - mmh3
-
 - numpy
 - scipy
 - matplotlib
@@ -18,6 +17,9 @@
 Both bgpdump and bgpstream are optional but you need at least one of them.
 
 ## Usage:
+
+The main program is **ashash.py** and it requires at least three arguments: a RIB dump, update dumps, and a directory to write the results.
+
 #### Example: monitoring the whole Internet from local files:
 ```
 python2 ashash.py /data/myRib.dump /data/myUpdates0.dump /data/myUpdates1.dump
@@ -37,6 +39,9 @@ python2 ashash.py -f 15169  -N 8 -M 8 /data/myRib.dump /data/myUpdates.dump
 ```
 python2 ashash.py  "@bgpstream:1461340700,1461340900" "@bgpstream:1461340800,1461346200" ../results/bgpstream/
 ```
+
+That means we get the RIB files from 16:00 ("@bgpstream:1461340700,1461340900") and update files from 16:00 to 17:30 ("@bgpstream:1461340800,1461346200").
+
 
 ## Output
 Results are written to a file in the directory given as last argument (e.g.
