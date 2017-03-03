@@ -1,6 +1,7 @@
 from lxml import etree
 import lxml
 import lxml.html
+import sys
 
 
 def parsehtml(filename = "./20160601_caida_as_rank.html"):
@@ -22,4 +23,7 @@ def parsehtml(filename = "./20160601_caida_as_rank.html"):
 
 
 if __name__ == "__main__":
-    parsehtml()
+    if len(sys.argv) < 2:
+        print "usage: %s input.html" % sys.argv[0]
+    else:
+        parsehtml(sys.argv[1])
