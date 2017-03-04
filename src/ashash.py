@@ -473,7 +473,7 @@ if __name__ == "__main__":
         if args.plot:
             # Add centrality values
             asAggProb, asProb = computeCentrality(rtree, args.spatial)
-            nx.set_node_attributes(g, "centrality", asAggProb)
+            nx.set_node_attributes(g, "AS hegemony", asAggProb)
             # Set nodes color (peers are blue and filtered ASN are red)
             root = rtree.search_exact("0.0.0.0/0")
             nodeColor = {data["peerASN"]:"b" for peer, data in root.data.iteritems() if data["peerASN"] in g}

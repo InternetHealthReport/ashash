@@ -12,10 +12,21 @@ import numpy as np
 import errno
 import scipy
 
+
 def ecdf(a, **kwargs):
     sorted=np.sort( a )
     yvals=np.arange(len(sorted))/float(len(sorted))
     plt.plot( sorted, yvals, **kwargs )
+
+
+def eccdf(a, **kwargs):
+    sorted=np.sort( a )
+    yvals=np.arange(len(sorted))/float(len(sorted))
+    plt.plot( sorted, 1-yvals, **kwargs )
+
+
+def smooth(x, N):
+    return np.convolve(x, np.ones((N,))/N, mode='valid') 
 
 
 def tableResults(path, newFormat=True):
@@ -72,13 +83,15 @@ def extractData(start, end, monitoredAS=None, filterBGPmsg=None):
 
     p1.wait()
 
-def longStats(filter=None):
+def longStats(af = 4, filter=None):
     dataDirectory = "/data/routeviews/archive.routeviews.org/route-views.linx/bgpdata/"
-    af = 4
+    
     space = 1
     yearRange = range(2004, 2017)
     monthRange = range(1,13)
+    # monthRange = [6] #range(1,13)
     day = 15
+    dateRange = []
 
     tier1 = {"3356":[], "1299":[], "174":[] ,"2914":[],"3257":[], "6453":[], "3491":[], "701":[], "1239":[], "6762":[]}
 
@@ -88,7 +101,10 @@ def longStats(filter=None):
         for month in monthRange:
             ribs = glob.glob(dataDirectory+"{ye}.{mo:02d}/RIBS/rib.{ye}{mo:02d}{da:02d}.*.bz2".format(ye=ye, mo=month, da=day))
             ribs.sort()
+            if len(ribs) < 1:
+                continue
             ribFiles.append(((ye,month,day),ribs[0]))
+            dateRange.append(datetime.datetime(ye,month,day))
 
     outDir = "../results/longStats_space%s_ipv%s/" % (space, af)
     try:
@@ -105,44 +121,63 @@ def longStats(filter=None):
     plt.clf()
     for i, (date, ribFile) in enumerate(ribFiles):
         if filter is None:
-            centralityFile = outDir+"/%s%02d%02d.pickle" % (date[0], date[1], date[2])
+            centralityFile = outDir+"/%s%02d%02d_af%s.pickle" % (date[0], date[1], date[2], af)
+            fList = None
         else:
-            centralityFile = outDir+"/%s%02d%02d_AS%s.pickle" % (date[0], date[1], date[2],filter)
+            centralityFile = outDir+"/%s%02d%02d_AS%s_af%s.pickle" % (date[0], date[1], date[2],filter, af)
+            fList = [filter]
 
         if not os.path.exists(centralityFile):
-            rtree, _ = ashash.readrib(ribFile, space, af) 
+            rtree, _ = ashash.readrib(ribFile, space, af, filter=fList) 
             asAggProb, asProb = ashash.computeCentrality(rtree, af)
             pickle.dump((asAggProb, asProb), open(centralityFile, "wb"))
         else:
             asAggProb, asProb = pickle.load(open(centralityFile,"rb"))
 
-        if filter:
+        if asAggProb is None or len(asAggProb) < 1:
+            continue
+
+        if filter is None and af==4:
             for k,v in tier1.iteritems():
                 v.append(asAggProb[str(k)])
 
-        ecdf(asAggProb.values(), lw=1.3, label=date[0],c=ccmap(i/float(len(ribFiles)) ) )
+        if not filter is None:
+            del asAggProb[str(filter)]
+
+        eccdf(asAggProb.values(), lw=1.3, label=date[0],c=ccmap(i/float(len(ribFiles)) ) )
+        # print date
+        # maxKey = max(asAggProb, key=asAggProb.get)
+        # print "AS%s = %s" % (maxKey, asAggProb[maxKey]) 
 
     plt.grid(True)
     #plt.legend(loc="right")
     plt.colorbar(CS3)
     plt.xscale("log")
+    plt.yscale("log")
     #plt.yscale("log")
-    plt.xlim([10**-8, 10**-2])
-    plt.ylim([10**-3, 1])
+    # plt.xlim([10**-8, 10**-2])
+    if filter is None:
+        plt.xlim([10**-7, 1.1])
+    else:
+        plt.xlim([10**-4, 1.1])
+    # plt.ylim([10**-3, 1.1])
+    plt.xlabel("AS hegemony")
+    plt.ylabel("CCDF")
     plt.tight_layout()
     if filter is None:
-        plt.savefig(centralityFile.rpartition("/")[0]+"/betweenessLongitudinal.eps")
+        plt.title("Entire IPv%s space" % af)
+        plt.savefig(centralityFile.rpartition("/")[0]+"/hegemonyLongitudinal_af%s.eps" % af)
     else:
-        plt.title("AS%s" % filter)
-        plt.savefig(centralityFile.rpartition("/")[0]+"/betweenessLongitudinal_AS%s.eps" % filter)
+        plt.title("AS%s IPv%s space" % (filter, af))
+        plt.savefig(centralityFile.rpartition("/")[0]+"/hegemonyLongitudinal_AS%s_af%s.eps" % (filter, af))
 
-    if filter is None:
-        plt.figure()
+    if filter is None and af==4:
+        plt.figure(figsize=(8,4))
         for k,v in tier1.iteritems():
-            plt.plot(yearRange, v, label=k)
+            plt.plot(dateRange, v, label=k)
         plt.grid(True)
-        plt.ylabel("AS betweenness")
-        plt.legend(loc="best")
+        plt.ylabel("AS hegemony")
+        plt.legend(loc="center", bbox_to_anchor=(0.5, 1), ncol=10)
         plt.tight_layout()
         plt.savefig(centralityFile.rpartition("/")[0]+"/tier1.eps")
 
@@ -153,10 +188,11 @@ def compareToCaidaRank():
     dataDirectory = "/data/routeviews/archive.routeviews.org/route-views.linx/bgpdata/"
 
     # Load Caida as rank
-    caida = np.genfromtxt("../data/20160901_asRank.csv", dtype=str, delimiter=",")
+    # caida = np.genfromtxt("../data/20160601_asRank.csv", dtype=str, delimiter=",")
+    caida = np.genfromtxt("../data/20160601_asRank.csv", dtype=str, delimiter=",")
 
-    centralityFile = "../results/caidaRank/20160901.2200.pickle"
-    ribFile = dataDirectory+"2016.09/RIBS/rib.20160901.2200.bz2"
+    centralityFile = "../results/caidaRank/20160601.0000.pickle"
+    ribFile = dataDirectory+"2016.06/RIBS/rib.20160601.0000.bz2"
     if not os.path.exists(centralityFile):
         rtree, _ = ashash.readrib(ribFile, space, af) 
         asAggProb, asProb = ashash.computeCentrality(rtree, af)
@@ -164,13 +200,17 @@ def compareToCaidaRank():
     else:
         asAggProb, asProb = pickle.load(open(centralityFile,"rb"))
 
-    sortedAs = sorted(asAggProb, key=lambda k: asAggProb[k], reverse=True) 
+    # sortedAs = sorted(asAggProb, key=lambda k: asAggProb[k], reverse=True) 
+    ourRanks = dict(zip(asAggProb.keys(),scipy.stats.rankdata( 1.0-np.array(asAggProb.values()))))
 
-    r = np.arange(1,10)
-    topList = list(r*10)
-    topList.extend(r*100)
-    topList.extend(r*1000)
-    topList.extend(range(10000, 50000, 10000))
+    # r = np.arange(1,10)
+    # topList = list(r*10)
+    # topList.extend(r*100)
+    # topList.extend(r*1000)
+    # topList.extend(range(10000, 50000, 10000))
+    # topList = [-1]
+    topList = sorted(np.unique(caida[:,0]).astype(int))
+    print len(topList)
     x=[]
     y=[]
     for top in topList:
@@ -179,19 +219,28 @@ def compareToCaidaRank():
         us = [] 
         caidaFiltered = []
         for rank, asn in caida[:top]:
-            if asn in asAggProb:
-                us.append(sortedAs.index(asn)+1)
+            if asn in ourRanks:
+                us.append(ourRanks[asn])
                 caidaFiltered.append(rank)
 
         res = scipy.stats.spearmanr(caidaFiltered, us)
+        # res = scipy.stats.kendalltau(caidaFiltered, us)
+        # res = scipy.stats.kruskal(caidaFiltered, us)
+        print res
         y.append(res[0])
+
+    plt.figure()
+    plt.plot(caidaFiltered,us,"+")
+    plt.savefig("../results/caidaRank/rankComparison.eps")
         
     plt.figure()
     plt.plot(x,y,"x-")
+    # plt.plot(smooth(x,50),smooth(y,50),"x-")
     plt.xscale("log")
     plt.xlabel("CAIDA top ASN")
-    plt.ylabel("Spearman correlation coeff.")
+    plt.ylabel("Correlation coeff.")
     plt.tight_layout()
-    plt.savefig("../results/caidaRank/spearmanCorrelation.eps")
+    plt.savefig("../results/caidaRank/SpearmanCorrelation.eps")
 
     return caidaFiltered, us
+
