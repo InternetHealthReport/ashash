@@ -93,7 +93,7 @@ def longStats(af = 4, filter=None):
     day = 15
     dateRange = []
 
-    tier1 = {"3356":[], "1299":[], "174":[] ,"2914":[],"3257":[], "6453":[], "3491":[], "701":[], "1239":[], "6762":[]}
+    tier1 = {"3356":[], "1299":[], "174":[] ,"2914":[],"3257":[]}#, "6453":[], "3491":[], "701":[], "1239":[], "6762":[]}
 
     # Find the first RIB files for each year
     ribFiles = []
@@ -172,12 +172,14 @@ def longStats(af = 4, filter=None):
         plt.savefig(centralityFile.rpartition("/")[0]+"/hegemonyLongitudinal_AS%s_af%s.eps" % (filter, af))
 
     if filter is None and af==4:
-        plt.figure(figsize=(8,4))
+        fig = plt.figure(figsize=(10,3))
         for k,v in tier1.iteritems():
-            plt.plot(dateRange, v, label=k)
+            plt.plot(dateRange, v, label="AS"+k)
+        plt.ylim([0,0.3])
         plt.grid(True)
         plt.ylabel("AS hegemony")
-        plt.legend(loc="center", bbox_to_anchor=(0.5, 1), ncol=10)
+        plt.xlabel("Time")
+        plt.legend(loc="center", bbox_to_anchor=(0.5, 1), ncol=len(tier1))
         plt.tight_layout()
         plt.savefig(centralityFile.rpartition("/")[0]+"/tier1.eps")
 
