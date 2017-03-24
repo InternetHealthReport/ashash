@@ -250,20 +250,37 @@ def compareToCaidaRank():
 def peerSensitivity():
     space = 1
     af = 4
-    rtree = None
+    allasCount = {}
 
     ribFiles = glob.glob("/data/routeviews/archive.routeviews.org/*/*/RIBS/rib.20160601.0000.bz2")
     ribFiles.extend(glob.glob("/data/routeviews/archive.routeviews.org/*/*/*/RIBS/rib.20160601.0000.bz2"))
     ribFiles.extend(glob.glob("/data/ris/*/*/bview.20160601.0000.gz"))
-    
+    ribFiles.append("/data/bgpmon/ribs/201606/ribs") 
+
+    print ribFiles
 
     for i, ribFile in enumerate(ribFiles):
-        centralityFile = "../results/peerSensitivity/20160601.0000_%scollectors.pickle" % (i+1)
-        if not os.path.exists(centralityFile):
-            rtree, _ = ashash.readrib(ribFile, space, af, rtree) 
-            asAggProb, asProb, nbPeers = ashash.computeCentrality(rtree, af)
-            print "%s: %s peers" % (i, nbPeers) 
-            pickle.dump((asAggProb, asProb, nbPeers), open(centralityFile, "wb"))
+        asCountFile = "../results/peerSensitivity/20160601.0000_asCount%s.pickle" % (i)
+        if not os.path.exists(asCountFile):
+            rtree, _ = ashash.readrib(ribFile, space, af) 
+            asCount = rtree.search_exact("0.0.0.0/0").data
+            print "%s: %s peers" % (i, len(asCount)) 
+            pickle.dump(asCount, open(asCountFile, "wb"))
         else:
-            asAggProb, asProb = pickle.load(open(centralityFile,"rb"))
+            asCountFile= pickle.load(open(asCountFile,"rb"))
+
+        for peer, count in asCount.iteritems():
+            if not peer in allasCount:
+                allasCount[peer] = count
+            else:
+                print "Warning: peer %s is observed multiple times (%s)" % (peer, ribFile)
+
+    asAggProbRef, asProbRef, nbPeersRef = ashash.computeCentrality(allasCount, af)
+    
+
+
+
+
+
+
 
