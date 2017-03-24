@@ -246,3 +246,24 @@ def compareToCaidaRank():
 
     return caidaFiltered, us
 
+
+def peerSensitivity():
+    space = 1
+    af = 4
+    rtree = None
+
+    ribFiles = glob.glob("/data/routeviews/archive.routeviews.org/*/*/RIBS/rib.20160601.0000.bz2")
+    ribFiles.extend(glob.glob("/data/routeviews/archive.routeviews.org/*/*/*/RIBS/rib.20160601.0000.bz2"))
+    ribFiles.extend(glob.glob("/data/ris/*/*/bview.20160601.0000.gz"))
+    
+
+    for i, ribFile in enumerate(ribFiles):
+        centralityFile = "../results/peerSensitivity/20160601.0000_%scollectors.pickle" % (i+1)
+        if not os.path.exists(centralityFile):
+            rtree, _ = ashash.readrib(ribFile, space, af, rtree) 
+            asAggProb, asProb, nbPeers = ashash.computeCentrality(rtree, af)
+            print "%s: %s peers" % (i, nbPeers) 
+            pickle.dump((asAggProb, asProb, nbPeers), open(centralityFile, "wb"))
+        else:
+            asAggProb, asProb = pickle.load(open(centralityFile,"rb"))
+

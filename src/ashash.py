@@ -361,10 +361,11 @@ def computeCentrality(rtree, spatial, outFile=None):
         for asn in asList:
             asProb[asn].append(asCount[asn]/float(totalCount))
 
-    if len(totalCountList) == 0:
+    nbPeers = len(totalCountList)
+    if nbPeers == 0:
         # There is no peers?
         sys.stderr.write("Warning: no peers!")
-        return None, None
+        return None, None, 0
 
     asAggProb = aggregateCentrality(asProb)
 
@@ -376,14 +377,14 @@ def computeCentrality(rtree, spatial, outFile=None):
             len(root.data), len(asList), np.mean(totalCountList)))
 
     if not outFile is None:
-        outFile.write("%s | %s | %s | %s | " % (len(totalCountList), len(root.data), len(asProb), np.mean(totalCountList)))
+        outFile.write("%s | %s | %s | %s | " % (nbPeers, len(root.data), len(asProb), np.mean(totalCountList)))
 
-    return asAggProb, asProb
+    return asAggProb, asProb, nbPeers
 
 
 def computeSimhash(rtree, pool, N, M, spatial, outFile=None, filter=None):
     # get AS centrality
-    asAggProb, asProb = computeCentrality(rtree, spatial, outFile)
+    asAggProb, asProb, _ = computeCentrality(rtree, spatial, outFile)
     # sketching
     res = sketching(asAggProb, pool, N, M)
     return res, asProb 
@@ -472,7 +473,7 @@ if __name__ == "__main__":
 
         if args.plot:
             # Add centrality values
-            asAggProb, asProb = computeCentrality(rtree, args.spatial)
+            asAggProb, asProb, _ = computeCentrality(rtree, args.spatial)
             nx.set_node_attributes(g, "AS hegemony", asAggProb)
             # Set nodes color (peers are blue and filtered ASN are red)
             root = rtree.search_exact("0.0.0.0/0")
@@ -561,7 +562,7 @@ if __name__ == "__main__":
     if args.plot :
 
         # Add centrality values
-        asAggProb, asProb = computeCentrality(rtree, args.spatial)
+        asAggProb, asProb, _ = computeCentrality(rtree, args.spatial)
         prob = {asn:val for asn, val in asAggProb.iteritems() if asn in g}
         nx.set_node_attributes(g, "centrality", prob)
         # Set nodes color (peers are blue and filtered ASN are red)
