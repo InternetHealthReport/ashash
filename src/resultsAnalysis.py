@@ -9,6 +9,7 @@ import json
 import cPickle as pickle
 import ashash
 import numpy as np
+import scipy.stats as sps
 import errno
 import scipy
 
@@ -262,23 +263,64 @@ def peerSensitivity():
     for i, ribFile in enumerate(ribFiles):
         asCountFile = "../results/peerSensitivity/20160601.0000_asCount%s.pickle" % (i)
         if not os.path.exists(asCountFile):
+            continue
             rtree, _ = ashash.readrib(ribFile, space, af) 
             asCount = rtree.search_exact("0.0.0.0/0").data
-            print "%s: %s peers" % (i, len(asCount)) 
             pickle.dump(asCount, open(asCountFile, "wb"))
         else:
-            asCountFile= pickle.load(open(asCountFile,"rb"))
+            asCount= pickle.load(open(asCountFile,"rb"))
 
+        print "%s: %s peers" % (i, len(asCount)) 
         for peer, count in asCount.iteritems():
-            if not peer in allasCount:
-                allasCount[peer] = count
-            else:
-                print "Warning: peer %s is observed multiple times (%s)" % (peer, ribFile)
+            if count["totalCount"]>400000:
+                if not peer in allasCount:
+                    allasCount[peer] = count
+                else:
+                    print "Warning: peer %s is observed multiple times (%s)" % (peer, ribFile)
 
-    asAggProbRef, asProbRef, nbPeersRef = ashash.computeCentrality(allasCount, af)
+    asDistRef, _, _ = ashash.computeCentrality(allasCount, af)
     
+    # Remove AS with a score of 0.0
+    toremove = [asn for asn, score in asDistRef.iteritems() if score==0.0]
+    for asn in toremove:
+        del asDistRef[asn]
 
+    minVal = min(asDistRef.values())
 
+    nbPeersList = range(1, len(allasCount), 20)
+    results = []
+
+    for nbPeers in nbPeersList:
+        tmp = []
+        for _ in range(10):
+
+            # Randomly select peers
+            peersIndex = np.random.random_integers(len(alasCount), size=(nbPeers))
+
+            asCount = {}
+            for p in peersIndex:
+                asCount[allasCount.keys()[p-1]] = allasCount.values()[p-1]
+
+            asDist, _, _ = ashash.computeCentrality(asCount, af)
+
+            # Remove AS with a score == 0.0
+            toremove = [asn for asn, score in asDist.iteritems() if score==0.0]
+            for asn in toremove:
+                del asDist[asn]
+
+            # Set the same number of ASN for both distributions
+            missingAS = set(asDistRef.keys()).difference(asDist.keys())
+            for asn in missingAS:
+                asDist[asn] = minVal
+
+            # Compute the KL-divergence
+            dist = [asDist[asn] for asn in asDistRef.keys()]
+            tmp.append(sps.entropy(dist, asDistRef.values()))
+
+        results.append(tmp)
+
+    # save final results
+    pickle.dump((nbPeersList, results), open("../results/peerSensitvity/KLdiv.pickle"))
 
 
 
