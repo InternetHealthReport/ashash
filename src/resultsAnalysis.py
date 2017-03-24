@@ -129,7 +129,7 @@ def longStats(af = 4, filter=None):
 
         if not os.path.exists(centralityFile):
             rtree, _ = ashash.readrib(ribFile, space, af, filter=fList) 
-            asAggProb, asProb = ashash.computeCentrality(rtree, af)
+            asAggProb, asProb = ashash.computeCentrality(rtree.search_exact("0.0.0.0/0").data, af)
             pickle.dump((asAggProb, asProb), open(centralityFile, "wb"))
         else:
             asAggProb, asProb = pickle.load(open(centralityFile,"rb"))
@@ -197,7 +197,7 @@ def compareToCaidaRank():
     ribFile = dataDirectory+"2016.06/RIBS/rib.20160601.0000.bz2"
     if not os.path.exists(centralityFile):
         rtree, _ = ashash.readrib(ribFile, space, af) 
-        asAggProb, asProb = ashash.computeCentrality(rtree, af)
+        asAggProb, asProb = ashash.computeCentrality(rtree.search_exact("0.0.0.0/0").data, af)
         pickle.dump((asAggProb, asProb), open(centralityFile, "wb"))
     else:
         asAggProb, asProb = pickle.load(open(centralityFile,"rb"))
