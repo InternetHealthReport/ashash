@@ -403,7 +403,7 @@ def peerSensitivity():
         # Compute the KL-divergence
         dist = [asDist[asn] for asn in asDistRef.keys()]
         kldiv = sps.entropy(dist, asDistRef.values())
-        if kldiv>0.2 or nbPeers < 10:
+        if kldiv>0.2 :
             continue
         if collectorLabel.startswith("rrc"):
             plt.plot(nbPeers, kldiv,"C0o",ms=4)
