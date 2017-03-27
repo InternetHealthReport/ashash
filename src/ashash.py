@@ -336,7 +336,7 @@ def sketching(asAggProb, pool, N, M):
 def aggregateCentrality(asProb, trim=0.1):
     return {asn:float(stats.trim_mean(problist, trim))for asn, problist in asProb.iteritems()}
 
-def computeCentrality(allAsCount, spatial, outFile=None):
+def computeCentrality(allAsCount, spatial, outFile=None, filter=None):
     # root = 
     asProb = defaultdict(list)
     totalCountList = []
@@ -347,14 +347,16 @@ def computeCentrality(allAsCount, spatial, outFile=None):
     # For each RIB from our peers
     for peer, count in allAsCount.iteritems():
         totalCount = count["totalCount"]
+        print totalCount
 
         if filter is None:
             # If there is no filter we want only full feeds
-            if (totalCount <= 400000 and not spatial) or (totalCount <= 1000000000 and spatial):
+            if (totalCount <= 400000 and not spatial) or (totalCount <= 2000000000 and spatial):
                 continue
         elif totalCount == 0:
             continue
 
+        print "accepted!"
         asCount = count["asCount"]
         totalCountList.append(totalCount)
 
@@ -384,7 +386,7 @@ def computeCentrality(allAsCount, spatial, outFile=None):
 
 def computeSimhash(rtree, pool, N, M, spatial, outFile=None, filter=None):
     # get AS centrality
-    asAggProb, asProb, _ = computeCentrality(rtree.search_exact("0.0.0.0/0").data, spatial, outFile)
+    asAggProb, asProb, _ = computeCentrality(rtree.search_exact("0.0.0.0/0").data, spatial, outFile, filter)
     # sketching
     res = sketching(asAggProb, pool, N, M)
     return res, asProb 
@@ -473,7 +475,7 @@ if __name__ == "__main__":
 
         if args.plot:
             # Add centrality values
-            asAggProb, asProb, _ = computeCentrality(rtree.search_exact("0.0.0.0/0").data, args.spatial)
+            asAggProb, asProb, _ = computeCentrality(rtree.search_exact("0.0.0.0/0").data, args.spatial, filter)
             nx.set_node_attributes(g, "AS hegemony", asAggProb)
             # Set nodes color (peers are blue and filtered ASN are red)
             root = rtree.search_exact("0.0.0.0/0")
@@ -562,7 +564,7 @@ if __name__ == "__main__":
     if args.plot :
 
         # Add centrality values
-        asAggProb, asProb, _ = computeCentrality(rtree.search_exact("0.0.0.0/0").data, args.spatial)
+        asAggProb, asProb, _ = computeCentrality(rtree.search_exact("0.0.0.0/0").data, args.spatial, filter)
         prob = {asn:val for asn, val in asAggProb.iteritems() if asn in g}
         nx.set_node_attributes(g, "centrality", prob)
         # Set nodes color (peers are blue and filtered ASN are red)
