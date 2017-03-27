@@ -13,7 +13,7 @@ import random
 import scipy.stats as sps
 import errno
 import scipy
-
+from collections import OrderedDict
 
 def ecdf(a, **kwargs):
     sorted=np.sort( a )
@@ -364,7 +364,7 @@ def peerSensitivity():
 
     plt.figure()
     plt.fill_between(x, mi, ma, facecolor="0.8", alpha=0.5)
-    plt.plot(x, m,"-+", ms=4, color="0.6") 
+    plt.plot(x, m,"-+", ms=4, color="0.6", label="Randomly selected") 
     # plt.errorbar(x,m, [mi, ma], fmt="C3.", ms=4)
     plt.xlabel("Number of peers")
     plt.ylabel("KL divergence")
@@ -403,21 +403,24 @@ def peerSensitivity():
         # Compute the KL-divergence
         dist = [asDist[asn] for asn in asDistRef.keys()]
         kldiv = sps.entropy(dist, asDistRef.values())
-        if kldiv>0.2 :
+        if kldiv>0.5 :
             continue
         if collectorLabel.startswith("rrc"):
-            plt.plot(nbPeers, kldiv,"C0o",ms=4)
+            plt.plot(nbPeers, kldiv,"C0o",ms=4, label="RIS")
             collectorLabel = collectorLabel.replace("rrc","")
         elif collectorLabel == "bgpmon":
             plt.plot(nbPeers, kldiv,"C2^",ms=4)
         else:
-            plt.plot(nbPeers, kldiv,"C1*",ms=4)
+            plt.plot(nbPeers, kldiv,"C1*",ms=4, label="Route Views")
         if kldiv<1 or nbPeers>10:
-            plt.text(nbPeers, kldiv, collectorLabel, fontsize=6)
+            plt.text(nbPeers, kldiv, collectorLabel, fontsize=8)
         print "%s:\t %s peers \t  %s " % (collectorLabel, nbPeers, kldiv)
 
     # plt.yscale("log")
     # plt.xscale("log")
+    handles, labels = plt.gca().get_legend_handles_labels()
+    by_label = OrderedDict(zip(labels, handles))
+    plt.legend(by_label.values(), by_label.keys())
     plt.tight_layout()
     plt.savefig("../results/peerSensitivity/collectorDiversity.eps")
 
