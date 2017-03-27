@@ -347,7 +347,6 @@ def computeCentrality(allAsCount, spatial, outFile=None, filter=None):
     # For each RIB from our peers
     for peer, count in allAsCount.iteritems():
         totalCount = count["totalCount"]
-        print totalCount
 
         if filter is None:
             # If there is no filter we want only full feeds
@@ -356,7 +355,6 @@ def computeCentrality(allAsCount, spatial, outFile=None, filter=None):
         elif totalCount == 0:
             continue
 
-        print "accepted!"
         asCount = count["asCount"]
         totalCountList.append(totalCount)
 

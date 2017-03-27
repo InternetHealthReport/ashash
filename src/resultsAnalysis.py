@@ -131,7 +131,7 @@ def longStats(af = 4, filter=None):
 
         if not os.path.exists(centralityFile):
             rtree, _ = ashash.readrib(ribFile, space, af, filter=fList) 
-            asAggProb, asProb = ashash.computeCentrality(rtree.search_exact("0.0.0.0/0").data, af)
+            asAggProb, asProb = ashash.computeCentrality(rtree.search_exact("0.0.0.0/0").data, space)
             pickle.dump((asAggProb, asProb), open(centralityFile, "wb"))
         else:
             asAggProb, asProb = pickle.load(open(centralityFile,"rb"))
@@ -254,33 +254,53 @@ def peerSensitivity():
     af = 4
     allasCount = {}
     resultsFile = "../results/peerSensitivity/KLdiv.pickle"
+    collectorsDataFile = "../results/peerSensitivity/collectorData.pickle"
+    allPeersFile = "../results/peerSensitivity/allPeersDist.pickle"
+    collectorsDist = []
 
     if not os.path.exists(resultsFile):
         ribFiles = glob.glob("/data/routeviews/archive.routeviews.org/*/*/RIBS/rib.20160601.0000.bz2")
         ribFiles.extend(glob.glob("/data/routeviews/archive.routeviews.org/*/*/*/RIBS/rib.20160601.0000.bz2"))
         ribFiles.extend(glob.glob("/data/ris/*/*/bview.20160601.0000.gz"))
         ribFiles.append("/data/bgpmon/ribs/201606/ribs") 
-
-        print ribFiles
-
+        
         for i, ribFile in enumerate(ribFiles):
+            words = ribFile.split("/")
+            if "routeviews" in ribFile:
+                if words[-4] == "route-views3":
+                    label = "rv3"
+                elif words[-5] == "archive.routeviews.org" and words[-4] == "bgpdata":
+                    label = "rv2"
+                elif not "." in words[-5] and words[-5].startswith("route-views"):
+                    label = "rv"+words[-5][-1]
+                else:
+                    label = words[-5].split(".")[-1]
+            elif "ris" in ribFile:
+                label = words[-3]
+            else:
+                label = "bgpmon"
+
             asCountFile = "../results/peerSensitivity/20160601.0000_asCount%s.pickle" % (i)
             if not os.path.exists(asCountFile):
                 rtree, _ = ashash.readrib(ribFile, space, af) 
                 asCount = rtree.search_exact("0.0.0.0/0").data
-                pickle.dump(asCount, open(asCountFile, "wb"))
+                asDist, _, nbPeers = ashash.computeCentrality(asCount, space)
+                pickle.dump((asCount, asDist, nbPeers), open(asCountFile, "wb"))
             else:
-                asCount= pickle.load(open(asCountFile,"rb"))
+                asCount, asDist, nbPeers = pickle.load(open(asCountFile,"rb"))
 
-            print "%s: %s peers" % (i, len(asCount)) 
+            collectorsDist.append( (label, nbPeers, asDist) )
+
+            print "%s: %s peers" % (label, len(asCount)) 
             for peer, count in asCount.iteritems():
-                if count["totalCount"]>400000:
+                if count["totalCount"]>2000000000:
                     if not peer in allasCount:
                         allasCount[peer] = count
                     else:
                         print "Warning: peer %s is observed multiple times (%s)" % (peer, ribFile)
 
-        asDistRef, _, _ = ashash.computeCentrality(allasCount, af)
+        asDistRef, _, nbPeers = ashash.computeCentrality(allasCount, space)
+        pickle.dump((asDistRef, nbPeers), open(allPeersFile,"wb"))
         
         # Remove AS with a score of 0.0
         toremove = [asn for asn, score in asDistRef.iteritems() if score==0.0]
@@ -303,17 +323,19 @@ def peerSensitivity():
                 for p in peersIndex:
                     asCount[allasCount.keys()[p]] = allasCount.values()[p]
 
-                asDist, _, _ = ashash.computeCentrality(asCount, af)
+                asDist, _, _ = ashash.computeCentrality(asCount, space)
 
                 # Remove AS with a score == 0.0
                 toremove = [asn for asn, score in asDist.iteritems() if score==0.0]
-                for asn in toremove:
-                    del asDist[asn]
+                if not toremove is None:
+                    for asn in toremove:
+                        del asDist[asn]
 
                 # Set the same number of ASN for both distributions
                 missingAS = set(asDistRef.keys()).difference(asDist.keys())
-                for asn in missingAS:
-                    asDist[asn] = minVal
+                if not missingAS is None:
+                    for asn in missingAS:
+                        asDist[asn] = minVal
 
                 # Compute the KL-divergence
                 dist = [asDist[asn] for asn in asDistRef.keys()]
@@ -325,8 +347,11 @@ def peerSensitivity():
 
         # save final results
         pickle.dump((nbPeersList, results),open(resultsFile,"wb"))
+        pickle.dump(collectorsDist, open(collectorsDataFile,"wb"))
     else:
         nbPeersList, results = pickle.load(open(resultsFile,"rb"))
+        collectorDist = pickle.load(open(collectorsDataFile,"rb"))
+        asDistRef, allFullFeedPeers = pickle.load(open(allPeersFile,"rb"))
 
     m = np.mean(results[1:], axis=1)
     s = np.std(results[1:], axis=1)
@@ -343,6 +368,34 @@ def peerSensitivity():
     # plt.yscale("log")
     plt.tight_layout()
     plt.savefig("../results/peerSensitivity/meanKL.eps")
+
+    # Compare collectors:
+    minVal = min(asDistRef.values())
+    plt.figure()
+    for collectorLabel, nbPeers, asDist in collectorDist:
+        if asDist is None:
+            print "warning: ignore collector %s" % collectorLabel
+            continue
+
+        # Remove AS with a score == 0.0
+        toremove = [asn for asn, score in asDist.iteritems() if score==0.0]
+        if not toremove is None:
+            for asn in toremove:
+                del asDist[asn]
+
+        # Set the same number of ASN for both distributions
+        missingAS = set(asDistRef.keys()).difference(asDist.keys())
+        if not missingAS is None:
+            for asn in missingAS:
+                asDist[asn] = minVal
+
+        # Compute the KL-divergence
+        dist = [asDist[asn] for asn in asDistRef.keys()]
+        kldiv = sps.entropy(dist, asDistRef.values())
+        if np.isfinite(kldiv):
+            plt.text(nbPeers, kldiv, collectorLabel)
+    plt.savefig("../results/peerSensitivity/collectorDiversity.eps")
+
 
     return (nbPeersList, results)
 
