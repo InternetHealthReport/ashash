@@ -309,7 +309,8 @@ def peerSensitivity():
 
         minVal = min(asDistRef.values())
 
-        nbPeersList = range(1, len(allasCount), 10)
+        nbPeersList = range(0, len(allasCount), 10)
+        nbPeersList[0] = 1
         results = []
 
         for nbPeers in nbPeersList:
@@ -355,28 +356,35 @@ def peerSensitivity():
 
     m = np.mean(results[1:], axis=1)
     s = np.std(results[1:], axis=1)
-    mi = m-np.min(results[1:], axis=1)
-    ma = np.max(results[1:], axis=1)-m
+    # mi = m-np.min(results[1:], axis=1)
+    # ma = np.max(results[1:], axis=1)-m
+    mi = np.min(results[1:], axis=1)
+    ma = np.max(results[1:], axis=1)
     x = nbPeersList[1:]
 
     plt.figure()
-    # plt.fill_between(x,mi, ma)
-    plt.errorbar(x,m, [mi, ma], fmt="o", ms=4)
-    # plt.plot(x, m,"k-o", ms=3) 
+    plt.fill_between(x, mi, ma, facecolor="0.8", alpha=0.5)
+    plt.plot(x, m,"-+", ms=4, color="0.6") 
+    # plt.errorbar(x,m, [mi, ma], fmt="C3.", ms=4)
     plt.xlabel("Number of peers")
     plt.ylabel("KL divergence")
-    # plt.xscale("log")
+    plt.xscale("log")
     # plt.yscale("log")
     plt.tight_layout()
     plt.savefig("../results/peerSensitivity/meanKL.eps")
 
     # Compare collectors:
+    # Remove AS with a score of 0.0
+    toremove = [asn for asn, score in asDistRef.iteritems() if score==0.0]
+    for asn in toremove:
+        del asDistRef[asn]
     minVal = min(asDistRef.values())
-    plt.figure()
+
+    # plt.figure()
     plt.xlabel("Number of peers")
     plt.ylabel("KL divergence")
     for collectorLabel, nbPeers, asDist in collectorDist:
-        if asDist is None:
+        if asDist is None :
             print "warning: ignore collector %s" % collectorLabel
             continue
 
@@ -395,8 +403,21 @@ def peerSensitivity():
         # Compute the KL-divergence
         dist = [asDist[asn] for asn in asDistRef.keys()]
         kldiv = sps.entropy(dist, asDistRef.values())
-        if np.isfinite(kldiv):
-            plt.text(nbPeers, kldiv, collectorLabel)
+        if kldiv>0.2 or nbPeers < 10:
+            continue
+        if collectorLabel.startswith("rrc"):
+            plt.plot(nbPeers, kldiv,"C0o",ms=4)
+            collectorLabel = collectorLabel.replace("rrc","")
+        elif collectorLabel == "bgpmon":
+            plt.plot(nbPeers, kldiv,"C2^",ms=4)
+        else:
+            plt.plot(nbPeers, kldiv,"C1*",ms=4)
+        if kldiv<1 or nbPeers>10:
+            plt.text(nbPeers, kldiv, collectorLabel, fontsize=6)
+        print "%s:\t %s peers \t  %s " % (collectorLabel, nbPeers, kldiv)
+
+    # plt.yscale("log")
+    # plt.xscale("log")
     plt.tight_layout()
     plt.savefig("../results/peerSensitivity/collectorDiversity.eps")
 
