@@ -373,6 +373,8 @@ def peerSensitivity():
     # Compare collectors:
     minVal = min(asDistRef.values())
     plt.figure()
+    plt.xlabel("Number of peers")
+    plt.ylabel("KL divergence")
     for collectorLabel, nbPeers, asDist in collectorDist:
         if asDist is None:
             print "warning: ignore collector %s" % collectorLabel
@@ -395,6 +397,7 @@ def peerSensitivity():
         kldiv = sps.entropy(dist, asDistRef.values())
         if np.isfinite(kldiv):
             plt.text(nbPeers, kldiv, collectorLabel)
+    plt.tight_layout()
     plt.savefig("../results/peerSensitivity/collectorDiversity.eps")
 
 
