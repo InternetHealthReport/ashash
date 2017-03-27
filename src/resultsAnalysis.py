@@ -9,6 +9,7 @@ import json
 import cPickle as pickle
 import ashash
 import numpy as np
+import random
 import scipy.stats as sps
 import errno
 import scipy
@@ -252,6 +253,7 @@ def peerSensitivity():
     space = 1
     af = 4
     allasCount = {}
+    resultsFile = "../results/peerSensitivity/KLdiv.pickle"
 
     ribFiles = glob.glob("/data/routeviews/archive.routeviews.org/*/*/RIBS/rib.20160601.0000.bz2")
     ribFiles.extend(glob.glob("/data/routeviews/archive.routeviews.org/*/*/*/RIBS/rib.20160601.0000.bz2"))
@@ -260,69 +262,89 @@ def peerSensitivity():
 
     print ribFiles
 
-    for i, ribFile in enumerate(ribFiles):
-        asCountFile = "../results/peerSensitivity/20160601.0000_asCount%s.pickle" % (i)
-        if not os.path.exists(asCountFile):
-            continue
-            rtree, _ = ashash.readrib(ribFile, space, af) 
-            asCount = rtree.search_exact("0.0.0.0/0").data
-            pickle.dump(asCount, open(asCountFile, "wb"))
-        else:
-            asCount= pickle.load(open(asCountFile,"rb"))
+    if not os.path.exists(resultsFile):
+        for i, ribFile in enumerate(ribFiles):
+            asCountFile = "../results/peerSensitivity/20160601.0000_asCount%s.pickle" % (i)
+            if not os.path.exists(asCountFile):
+                rtree, _ = ashash.readrib(ribFile, space, af) 
+                asCount = rtree.search_exact("0.0.0.0/0").data
+                pickle.dump(asCount, open(asCountFile, "wb"))
+            else:
+                asCount= pickle.load(open(asCountFile,"rb"))
 
-        print "%s: %s peers" % (i, len(asCount)) 
-        for peer, count in asCount.iteritems():
-            if count["totalCount"]>400000:
-                if not peer in allasCount:
-                    allasCount[peer] = count
-                else:
-                    print "Warning: peer %s is observed multiple times (%s)" % (peer, ribFile)
+            print "%s: %s peers" % (i, len(asCount)) 
+            for peer, count in asCount.iteritems():
+                if count["totalCount"]>400000:
+                    if not peer in allasCount:
+                        allasCount[peer] = count
+                    else:
+                        print "Warning: peer %s is observed multiple times (%s)" % (peer, ribFile)
 
-    asDistRef, _, _ = ashash.computeCentrality(allasCount, af)
-    
-    # Remove AS with a score of 0.0
-    toremove = [asn for asn, score in asDistRef.iteritems() if score==0.0]
-    for asn in toremove:
-        del asDistRef[asn]
+        asDistRef, _, _ = ashash.computeCentrality(allasCount, af)
+        
+        # Remove AS with a score of 0.0
+        toremove = [asn for asn, score in asDistRef.iteritems() if score==0.0]
+        for asn in toremove:
+            del asDistRef[asn]
 
-    minVal = min(asDistRef.values())
+        minVal = min(asDistRef.values())
 
-    nbPeersList = range(1, len(allasCount), 20)
-    results = []
+        nbPeersList = range(1, len(allasCount), 10)
+        results = []
 
-    for nbPeers in nbPeersList:
-        tmp = []
-        for _ in range(10):
+        for nbPeers in nbPeersList:
+            tmp = []
+            for _ in range(10):
 
-            # Randomly select peers
-            peersIndex = np.random.random_integers(len(alasCount), size=(nbPeers))
+                # Randomly select peers
+                peersIndex = random.sample(range(len(allasCount)), nbPeers)
 
-            asCount = {}
-            for p in peersIndex:
-                asCount[allasCount.keys()[p-1]] = allasCount.values()[p-1]
+                asCount = {}
+                for p in peersIndex:
+                    asCount[allasCount.keys()[p]] = allasCount.values()[p]
 
-            asDist, _, _ = ashash.computeCentrality(asCount, af)
+                asDist, _, _ = ashash.computeCentrality(asCount, af)
 
-            # Remove AS with a score == 0.0
-            toremove = [asn for asn, score in asDist.iteritems() if score==0.0]
-            for asn in toremove:
-                del asDist[asn]
+                # Remove AS with a score == 0.0
+                toremove = [asn for asn, score in asDist.iteritems() if score==0.0]
+                for asn in toremove:
+                    del asDist[asn]
 
-            # Set the same number of ASN for both distributions
-            missingAS = set(asDistRef.keys()).difference(asDist.keys())
-            for asn in missingAS:
-                asDist[asn] = minVal
+                # Set the same number of ASN for both distributions
+                missingAS = set(asDistRef.keys()).difference(asDist.keys())
+                for asn in missingAS:
+                    asDist[asn] = minVal
 
-            # Compute the KL-divergence
-            dist = [asDist[asn] for asn in asDistRef.keys()]
-            tmp.append(sps.entropy(dist, asDistRef.values()))
+                # Compute the KL-divergence
+                dist = [asDist[asn] for asn in asDistRef.keys()]
+                kldiv = sps.entropy(dist, asDistRef.values())
+                tmp.append(kldiv)
 
-        results.append(tmp)
+            results.append(tmp)
+            print tmp
 
-    # save final results
-    pickle.dump((nbPeersList, results), open("../results/peerSensitvity/KLdiv.pickle"))
+        # save final results
+        pickle.dump((nbPeersList, results),open(resultsFile,"wb"))
+    else:
+        nbPeersList, results = pickle.load(open(resultsFile,"rb"))
 
+    m = np.mean(results[1:], axis=1)
+    s = np.std(results[1:], axis=1)
+    mi = np.min(results[1:], axis=1)
+    ma = np.max(results[1:], axis=1)
+    x = nbPeersList[1:]
 
+    plt.figure()
+    plt.fill_between(x,mi, ma)
+    plt.plot(x, m,"k-") 
+    plt.xlabel("Number of peers")
+    plt.ylabel("KL divergence")
+    plt.xscale("log")
+    # plt.yscale("log")
+    plt.tight_layout()
+    plt.savefig("../results/peerSensitivity/meanKL.eps")
+
+    return (nbPeersList, results)
 
 
 
