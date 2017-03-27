@@ -255,14 +255,14 @@ def peerSensitivity():
     allasCount = {}
     resultsFile = "../results/peerSensitivity/KLdiv.pickle"
 
-    ribFiles = glob.glob("/data/routeviews/archive.routeviews.org/*/*/RIBS/rib.20160601.0000.bz2")
-    ribFiles.extend(glob.glob("/data/routeviews/archive.routeviews.org/*/*/*/RIBS/rib.20160601.0000.bz2"))
-    ribFiles.extend(glob.glob("/data/ris/*/*/bview.20160601.0000.gz"))
-    ribFiles.append("/data/bgpmon/ribs/201606/ribs") 
-
-    print ribFiles
-
     if not os.path.exists(resultsFile):
+        ribFiles = glob.glob("/data/routeviews/archive.routeviews.org/*/*/RIBS/rib.20160601.0000.bz2")
+        ribFiles.extend(glob.glob("/data/routeviews/archive.routeviews.org/*/*/*/RIBS/rib.20160601.0000.bz2"))
+        ribFiles.extend(glob.glob("/data/ris/*/*/bview.20160601.0000.gz"))
+        ribFiles.append("/data/bgpmon/ribs/201606/ribs") 
+
+        print ribFiles
+
         for i, ribFile in enumerate(ribFiles):
             asCountFile = "../results/peerSensitivity/20160601.0000_asCount%s.pickle" % (i)
             if not os.path.exists(asCountFile):
