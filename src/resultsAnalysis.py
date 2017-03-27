@@ -330,16 +330,17 @@ def peerSensitivity():
 
     m = np.mean(results[1:], axis=1)
     s = np.std(results[1:], axis=1)
-    mi = np.min(results[1:], axis=1)
-    ma = np.max(results[1:], axis=1)
+    mi = m-np.min(results[1:], axis=1)
+    ma = np.max(results[1:], axis=1)-m
     x = nbPeersList[1:]
 
     plt.figure()
-    plt.fill_between(x,mi, ma)
-    plt.plot(x, m,"k-") 
+    # plt.fill_between(x,mi, ma)
+    plt.errorbar(x,m, [mi, ma], fmt="o", ms=4)
+    # plt.plot(x, m,"k-o", ms=3) 
     plt.xlabel("Number of peers")
     plt.ylabel("KL divergence")
-    plt.xscale("log")
+    # plt.xscale("log")
     # plt.yscale("log")
     plt.tight_layout()
     plt.savefig("../results/peerSensitivity/meanKL.eps")
