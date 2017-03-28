@@ -1,5 +1,6 @@
 import os
 from subprocess import Popen, PIPE
+from collections import defaultdict
 import datetime
 import matplotlib as mpl
 mpl.use('Agg')
@@ -253,12 +254,13 @@ def peerSensitivity():
     space = 1
     af = 4
     allasCount = {}
-    resultsFile = "../results/peerSensitivity/KLdiv.pickle"
+    resultsFile = "../results/peerSensitivity/KLdiv_%s.pickle"
     collectorsDataFile = "../results/peerSensitivity/collectorData.pickle"
     allPeersFile = "../results/peerSensitivity/allPeersDist.pickle"
     collectorsDist = []
+    results = defaultdict(list)
 
-    if not os.path.exists(resultsFile):
+    if not os.path.exists(resultsFile % "Betweenness"):
         ribFiles = glob.glob("/data/routeviews/archive.routeviews.org/*/*/RIBS/rib.20160601.0000.bz2")
         ribFiles.extend(glob.glob("/data/routeviews/archive.routeviews.org/*/*/*/RIBS/rib.20160601.0000.bz2"))
         ribFiles.extend(glob.glob("/data/ris/*/*/bview.20160601.0000.gz"))
@@ -284,12 +286,14 @@ def peerSensitivity():
             if not os.path.exists(asCountFile):
                 rtree, _ = ashash.readrib(ribFile, space, af) 
                 asCount = rtree.search_exact("0.0.0.0/0").data
-                asDist, _, nbPeers = ashash.computeCentrality(asCount, space)
-                pickle.dump((asCount, asDist, nbPeers), open(asCountFile, "wb"))
+                asHegemony, _, nbPeers = ashash.computeCentrality(asCount, space)
+                # asBetweenness = ashash.computeBetweenness(asCount, space)
+                pickle.dump((asCount, asHegemony, nbPeers), open(asCountFile, "wb"))
             else:
-                asCount, asDist, nbPeers = pickle.load(open(asCountFile,"rb"))
+                asCount, asHegemony, nbPeers = pickle.load(open(asCountFile,"rb"))
 
-            collectorsDist.append( (label, nbPeers, asDist) )
+
+            collectorsDist.append( (label, nbPeers, asHegemony) )
 
             print "%s: %s peers" % (label, len(asCount)) 
             for peer, count in asCount.iteritems():
@@ -299,110 +303,121 @@ def peerSensitivity():
                     else:
                         print "Warning: peer %s is observed multiple times (%s)" % (peer, ribFile)
 
-        asDistRef, _, nbPeers = ashash.computeCentrality(allasCount, space)
-        pickle.dump((asDistRef, nbPeers), open(allPeersFile,"wb"))
+        asHegemonyRef, _, nbPeers = ashash.computeCentrality(allasCount, space)
+        asBetweennessRef, _, _ = ashash.computeBetweenness(allasCount, space)
+        pickle.dump((asHegemonyRef, asBetweennessRef, nbPeers), open(allPeersFile,"wb"))
         
-        # Remove AS with a score of 0.0
-        toremove = [asn for asn, score in asDistRef.iteritems() if score==0.0]
-        for asn in toremove:
-            del asDistRef[asn]
 
-        minVal = min(asDistRef.values())
+        for metricLabel, ref, computeMetric in [("Hegemony", asHegemonyRef, ashash.computeCentrality),
+                ("Betweenness", asBetweennessRef, ashash.computeBetweenness)]:
 
-        nbPeersList = range(0, len(allasCount), 10)
-        nbPeersList[0] = 1
-        results = []
+            if not os.path.exists(resultsFile % metricLabel):
+                # Remove AS with a score of 0.0
+                toremove = [asn for asn, score in ref.iteritems() if score==0.0]
+                for asn in toremove:
+                    del ref[asn]
 
-        for nbPeers in nbPeersList:
-            tmp = []
-            for _ in range(10):
+                minVal = min(ref.values())
 
-                # Randomly select peers
-                peersIndex = random.sample(range(len(allasCount)), nbPeers)
+                nbPeersList = range(0, len(allasCount), 10)
+                nbPeersList[0] = 1
 
-                asCount = {}
-                for p in peersIndex:
-                    asCount[allasCount.keys()[p]] = allasCount.values()[p]
+                for nbPeers in nbPeersList:
+                    tmp = []
+                    for _ in range(10):
 
-                asDist, _, _ = ashash.computeCentrality(asCount, space)
+                        # Randomly select peers
+                        peersIndex = random.sample(range(len(allasCount)), nbPeers)
 
-                # Remove AS with a score == 0.0
-                toremove = [asn for asn, score in asDist.iteritems() if score==0.0]
-                if not toremove is None:
-                    for asn in toremove:
-                        del asDist[asn]
+                        asCount = {}
+                        for p in peersIndex:
+                            asCount[allasCount.keys()[p]] = allasCount.values()[p]
 
-                # Set the same number of ASN for both distributions
-                missingAS = set(asDistRef.keys()).difference(asDist.keys())
-                if not missingAS is None:
-                    for asn in missingAS:
-                        asDist[asn] = minVal
+                        asMetric, _, _ = computeMetric(asCount, space)
 
-                # Compute the KL-divergence
-                dist = [asDist[asn] for asn in asDistRef.keys()]
-                kldiv = sps.entropy(dist, asDistRef.values())
-                tmp.append(kldiv)
+                        # Remove AS with a score == 0.0
+                        toremove = [asn for asn, score in asMetric.iteritems() if score==0.0]
+                        if not toremove is None:
+                            for asn in toremove:
+                                del asMetric[asn]
 
-            results.append(tmp)
-            print tmp
+                        # Set the same number of ASN for both distributions
+                        missingAS = set(ref.keys()).difference(asMetric.keys())
+                        if not missingAS is None:
+                            for asn in missingAS:
+                                asMetric[asn] = minVal
 
-        # save final results
-        pickle.dump((nbPeersList, results),open(resultsFile,"wb"))
-        pickle.dump(collectorsDist, open(collectorsDataFile,"wb"))
+                        # Compute the KL-divergence
+                        dist = [asMetric[asn] for asn in ref.keys()]
+                        kldiv = sps.entropy(dist, ref.values())
+                        tmp.append(kldiv)
+
+                    results[metricLabel].append(tmp)
+                    print tmp
+
+                # save final results
+                pickle.dump((nbPeersList, results[metricLabel]),open(resultsFile % metricLabel,"wb"))
+                pickle.dump(collectorsDist, open(collectorsDataFile,"wb"))
+            else:
+                (nbPeersList, results[metricLabel]) = pickle.load(open(resultsFile % metricLabel,"rb"))
+                collectorsDist = pickle.load(open(collectorsDataFile,"rb"))
+
     else:
-        nbPeersList, results = pickle.load(open(resultsFile,"rb"))
+        for metricLabel in ["Hegemony", "Betweenness"]:
+            nbPeersList, results[metricLabel] = pickle.load(open(resultsFile % metricLabel,"rb"))
         collectorDist = pickle.load(open(collectorsDataFile,"rb"))
-        asDistRef, allFullFeedPeers = pickle.load(open(allPeersFile,"rb"))
+        asHegemonyRef, asBetweennessRef, allFullFeedPeers = pickle.load(open(allPeersFile,"rb"))
 
-    m = np.mean(results[1:], axis=1)
-    s = np.std(results[1:], axis=1)
-    # mi = m-np.min(results[1:], axis=1)
-    # ma = np.max(results[1:], axis=1)-m
-    mi = np.min(results[1:], axis=1)
-    ma = np.max(results[1:], axis=1)
-    x = nbPeersList[1:]
+    for metricLabel in ["Hegemony", "Betweenness"]:
+        m = np.mean(results[metricLabel][1:], axis=1)
+        s = np.std(results[metricLabel][1:], axis=1)
+        # mi = m-np.min(results[metricLabel][1:], axis=1)
+        # ma = np.max(results[metricLabel][1:], axis=1)-m
+        mi = np.min(results[metricLabel][1:], axis=1)
+        ma = np.max(results[metricLabel][1:], axis=1)
+        x = nbPeersList[1:]
 
-    plt.figure()
-    plt.fill_between(x, mi, ma, facecolor="0.8", alpha=0.5)
-    plt.plot(x, m,"-+", ms=4, color="0.6") 
-    # plt.errorbar(x,m, [mi, ma], fmt="C3.", ms=4)
-    plt.xlabel("Number of peers")
-    plt.ylabel("KL divergence")
-    plt.xscale("log")
-    # plt.yscale("log")
-    plt.tight_layout()
-    plt.savefig("../results/peerSensitivity/meanKL.eps")
+        plt.figure()
+        plt.fill_between(x, mi, ma, facecolor="0.8", alpha=0.5)
+        plt.plot(x, m,"-+", ms=4, color="0.6") 
+        # plt.errorbar(x,m, [mi, ma], fmt="C3.", ms=4)
+        plt.xlabel("Number of peers")
+        plt.ylabel("KL divergence")
+        plt.xscale("log")
+        # plt.yscale("log")
+        plt.tight_layout()
+        plt.savefig("../results/peerSensitivity/meanKL_%s.eps" % metricLabel)
 
-    # Compare collectors:
-    # Remove AS with a score of 0.0
-    toremove = [asn for asn, score in asDistRef.iteritems() if score==0.0]
-    for asn in toremove:
-        del asDistRef[asn]
-    minVal = min(asDistRef.values())
+        # Compare collectors:
+        # Remove AS with a score of 0.0
+        toremove = [asn for asn, score in asHegemonyRef.iteritems() if score==0.0]
+        for asn in toremove:
+            del asHegemonyRef[asn]
+        minVal = min(asHegemonyRef.values())
 
     # plt.figure()
     plt.xlabel("Number of peers")
     plt.ylabel("KL divergence")
-    for collectorLabel, nbPeers, asDist in collectorDist:
-        if asDist is None :
+    for collectorLabel, nbPeers, asHegemony in collectorDist:
+        if asHegemony is None :
             print "warning: ignore collector %s" % collectorLabel
             continue
 
         # Remove AS with a score == 0.0
-        toremove = [asn for asn, score in asDist.iteritems() if score==0.0]
+        toremove = [asn for asn, score in asHegemony.iteritems() if score==0.0]
         if not toremove is None:
             for asn in toremove:
-                del asDist[asn]
+                del asHegemony[asn]
 
         # Set the same number of ASN for both distributions
-        missingAS = set(asDistRef.keys()).difference(asDist.keys())
+        missingAS = set(asHegemonyRef.keys()).difference(asHegemony.keys())
         if not missingAS is None:
             for asn in missingAS:
-                asDist[asn] = minVal
+                asHegemony[asn] = minVal
 
         # Compute the KL-divergence
-        dist = [asDist[asn] for asn in asDistRef.keys()]
-        kldiv = sps.entropy(dist, asDistRef.values())
+        dist = [asHegemony[asn] for asn in asHegemonyRef.keys()]
+        kldiv = sps.entropy(dist, asHegemonyRef.values())
         if kldiv>0.2 :
             continue
         if collectorLabel.startswith("rrc"):
