@@ -381,6 +381,33 @@ def computeCentrality(allAsCount, spatial, outFile=None, filter=None):
 
     return asAggProb, asProb, nbPeers
 
+def computeBetweenness(allAsCount, spatial):
+    sumTotalCount = 0
+    sumAsCount = defaultdict(int)
+
+    for peer, count in allAsCount.iteritems():
+        totalCount = count["totalCount"]
+
+        if filter is None:
+            # If there is no filter we want only full feeds
+            if (totalCount <= 400000 and not spatial) or (totalCount <= 2000000000 and spatial):
+                continue
+        elif totalCount == 0:
+            continue
+
+        asCount = count["asCount"]
+        sumTotalCount += totalCount
+
+        for asn, nbPaths in asCount.iteritems():
+            sumAsCount[asn] += nbPaths 
+
+    # Normalization
+    sumTotalCount = float(sumTotalCount)
+    for asn in sumAsCount.keys():
+        sumAsCount[asn]/=sumTotalCount
+
+    return sumAsCount, None, None
+
 
 def computeSimhash(rtree, pool, N, M, spatial, outFile=None, filter=None):
     # get AS centrality
