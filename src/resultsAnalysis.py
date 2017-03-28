@@ -14,6 +14,7 @@ import scipy.stats as sps
 import errno
 import scipy
 from collections import OrderedDict
+import statsmodels.stats.api as sms
 
 def ecdf(a, **kwargs):
     sorted=np.sort( a )
@@ -358,6 +359,7 @@ def peerSensitivity():
     s = np.std(results[1:], axis=1)
     # mi = m-np.min(results[1:], axis=1)
     # ma = np.max(results[1:], axis=1)-m
+    mi, ma = sms.DescrStatsW(results[1:]).tconfint_mean()
     mi = np.min(results[1:], axis=1)
     ma = np.max(results[1:], axis=1)
     x = nbPeersList[1:]
@@ -403,6 +405,7 @@ def peerSensitivity():
         # Compute the KL-divergence
         dist = [asDist[asn] for asn in asDistRef.keys()]
         kldiv = sps.entropy(dist, asDistRef.values())
+        print "%s:\t %s peers \t  %s " % (collectorLabel, nbPeers, kldiv)
         if kldiv>0.5 :
             continue
         if collectorLabel.startswith("rrc"):
@@ -414,7 +417,6 @@ def peerSensitivity():
             plt.plot(nbPeers, kldiv,"C1*",ms=4, label="Route Views")
         if kldiv<1 or nbPeers>10:
             plt.text(nbPeers, kldiv, collectorLabel, fontsize=8)
-        print "%s:\t %s peers \t  %s " % (collectorLabel, nbPeers, kldiv)
 
     # plt.yscale("log")
     # plt.xscale("log")
