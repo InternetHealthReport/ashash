@@ -18,6 +18,7 @@ import hashlib
 import cPickle as pickle
 from multiprocessing import Pool
 import mmh3
+import requests
 import json
 import networkx as nx
 
@@ -31,7 +32,7 @@ def findParent(node, zOrig):
         return findParent(parent, zOrig)
 
 
-def readrib(ribfile, spatialResolution=1, af=4, rtree=None, filter=None, plot=False, g=None):
+def readrib(ribfile, spatialResolution=1, af=4, rtree=None, filterAS=None, filterPrefix=None, plot=False, g=None):
     sys.stderr.write("Loading RIB files...") 
     if rtree is None:
         rtree = radix.Radix() 
@@ -67,36 +68,38 @@ def readrib(ribfile, spatialResolution=1, af=4, rtree=None, filter=None, plot=Fa
                 # Keep a list of BGP peers
                 root.data[zOrig]["peerASN"] = path[0]
 
-        # Check if the origin AS is in the filter:
-        if not filter is None:
+        # Check if the origin AS is in filterAS:
+        if not filterAS is None:
             try:
-                # Check if the origin AS is in the filter:
-                if not filter is None:
-                    # Check if the prefixes has been announced by filtered ASs or
-                    # if the origin AS is in the filter 
-                    
-                    covered = True
-                    filteredOrig = True
-                    node = rtree.search_exact(zPfx)
+                # Check if the prefixes has been announced by filtered ASs or
+                # if the origin AS is in the filter 
+                
+                covered = True
+                filteredOrig = True
+                node = rtree.search_exact(zPfx)
 
-                    if node is None and rtree.search_best(zPfx).prefixlen==0:
-                        # No peer has seen this prefix
-                        # And it is not covered by known prefixes
-                        covered = False
+                if node is None and rtree.search_best(zPfx).prefixlen==0:
+                    # No peer has seen this prefix
+                    # And it is not covered by known prefixes
+                    covered = False
 
-                    try:
-                        origAS = int(path[-1])
-                        if not origAS in filter:
-                            filteredOrig = False
-                    except ValueError:
-                        # TODO: handle cases for origin from a set of ASs?
+                try:
+                    origAS = int(path[-1])
+                    if not origAS in filterAS:
                         filteredOrig = False
+                except ValueError:
+                    # TODO: handle cases for origin from a set of ASs?
+                    filteredOrig = False
 
-                    if not covered and not filteredOrig:
-                        continue
+                if not covered and not filteredOrig:
+                    continue
 
             except ValueError:
                 # TODO: handle cases for origin from a set of ASs?
+                continue
+
+        if not filterPrefix is None:
+            if not zPfx in filterPrefix:
                 continue
 
         node = rtree.add(zPfx)
@@ -136,7 +139,7 @@ def readrib(ribfile, spatialResolution=1, af=4, rtree=None, filter=None, plot=Fa
     return rtree, g
 
 
-def readupdates(filename, rtree, spatialResolution=1, af=4, filter=None, plot=False, g=None):
+def readupdates(filename, rtree, spatialResolution=1, af=4, filterAS=None, filterPrefix=None, plot=False, g=None):
 
     if ribfile.startswith("@bgpstream:"):
         p1 = Popen(["bgpreader", "-m", "-w", filename.rpartition(":")[2], "-p", "routeviews", "-c", "route-views.linx", "-t", "updates"], stdout=PIPE)
@@ -209,8 +212,8 @@ def readupdates(filename, rtree, spatialResolution=1, af=4, filter=None, plot=Fa
             zTd, zDt, zS, zOrig, zAS, zPfx, sPath, zPro, zOr, z0, z1, z2, z3, z4, z5 = res
 
             path = sPath.split(" ")
-            # Check if the origin AS is in the filter:
-            if not filter is None:
+            # Check if the origin AS is in the filterAS:
+            if not filterAS is None:
                 # Check if the prefixes has been announced by filtered ASs or
                 # if the origin AS is in the filter 
                 
@@ -224,7 +227,7 @@ def readupdates(filename, rtree, spatialResolution=1, af=4, filter=None, plot=Fa
 
                 try:
                     origAS = int(path[-1])
-                    if not origAS in filter:
+                    if not origAS in filterAS:
                         filteredOrig = False
                 except ValueError:
                     # TODO: handle cases for origin from a set of ASs?
@@ -235,6 +238,10 @@ def readupdates(filename, rtree, spatialResolution=1, af=4, filter=None, plot=Fa
 
                 if plot and covered and not filteredOrig:
                     print zPfx, sPath
+
+            if not filterPrefix is None:
+                if not res[5] in filterPrefix:
+                    continue
 
 
             # Announce:
@@ -336,7 +343,7 @@ def sketching(asAggProb, pool, N, M):
 def aggregateCentrality(asProb, trim=0.1):
     return {asn:float(stats.trim_mean(problist, trim))for asn, problist in asProb.iteritems()}
 
-def computeCentrality(allAsCount, spatial, outFile=None, filter=None):
+def computeCentrality(allAsCount, spatial, outFile=None, filterAS=None, filterPrefix=None):
     # root = 
     asProb = defaultdict(list)
     totalCountList = []
@@ -348,8 +355,8 @@ def computeCentrality(allAsCount, spatial, outFile=None, filter=None):
     for peer, count in allAsCount.iteritems():
         totalCount = count["totalCount"]
 
-        if filter is None:
-            # If there is no filter we want only full feeds
+        if filterAS is None and filterPrefix is None:
+            # If there is no filterAS we want only full feeds
             if (totalCount <= 400000 and not spatial) or (totalCount <= 2000000000 and spatial):
                 continue
         elif totalCount == 0:
@@ -381,15 +388,15 @@ def computeCentrality(allAsCount, spatial, outFile=None, filter=None):
 
     return asAggProb, asProb, nbPeers
 
-def computeBetweenness(allAsCount, spatial):
+def computeBetweenness(allAsCount, spatial, filterAS=None, filterPrefix=None):
     sumTotalCount = 0
     sumAsCount = defaultdict(int)
 
     for peer, count in allAsCount.iteritems():
         totalCount = count["totalCount"]
 
-        if filter is None:
-            # If there is no filter we want only full feeds
+        if filterAS is None and filterPrefix is None:
+            # If there is no filterAS we want only full feeds
             if (totalCount <= 400000 and not spatial) or (totalCount <= 2000000000 and spatial):
                 continue
         elif totalCount == 0:
@@ -409,9 +416,9 @@ def computeBetweenness(allAsCount, spatial):
     return sumAsCount, None, None
 
 
-def computeSimhash(rtree, pool, N, M, spatial, outFile=None, filter=None):
+def computeSimhash(rtree, pool, N, M, spatial, outFile=None, filterAS=None, filterPrefix=None):
     # get AS centrality
-    asAggProb, asProb, _ = computeCentrality(rtree.search_exact("0.0.0.0/0").data, spatial, outFile, filter)
+    asAggProb, asProb, _ = computeCentrality(rtree.search_exact("0.0.0.0/0").data, spatial, outFile, filterAS, filterPrefix)
     # sketching
     res = sketching(asAggProb, pool, N, M)
     return res, asProb 
@@ -440,6 +447,15 @@ def compareSimhash(prevHash, curHash, prevSketches, currSketches, minVotes,  dis
     return anomalousAsn, nbAnomalousSketches, cumDistance
 
 
+def getPrefixPerCountry(cc):
+        geoinfo = "http://geoinfo.bgpmon.io/201601/prefixes_announced_from_country/%s" % cc
+        resp = requests.get(url=geoinfo)
+        geoinfodata = json.loads(resp.text)
+        prefixes = set([x["BGPPrefix"] for x in geoinfodata])
+
+        return prefixes
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-a","--af", help="address family (4, 6, or 0 for both)", type=int, default=4)
@@ -450,7 +466,8 @@ if __name__ == "__main__":
     parser.add_argument("-H","--historyDuration", help="Time duration of the history for computing the reference (mult 15min)", type=int, default=4)
     parser.add_argument("-p", "--proc", help="number of processes", type=int)
     parser.add_argument("-s", "--spatial", help="spatial resolution (0 for prefix, 1 for address)", type=int, default=1)
-    parser.add_argument("-f", "--filter", help="Filter: list of ASNs to monitor", type=str, default=None)
+    parser.add_argument("--filterAS", help="Filter: list of ASNs to monitor", type=str, default=None)
+    parser.add_argument("--filterCountry", help="Filter: country code to monitor", type=str, default=None)
     parser.add_argument("-w", "--window", help="Time window: time resolution in seconds (works only with  bgpstream)", type=int, default=900)
     parser.add_argument("--plot", help="plot figures", action="store_true")
     parser.add_argument("ribs", help="RIBS files")
@@ -461,15 +478,23 @@ if __name__ == "__main__":
     if args.proc is None:
         args.proc = args.N
 
-    if not args.filter is None:
-        filter = json.loads(args.filter)
-        if isinstance(filter, int):
-            filter = [filter]
-        elif not isinstance(filter, list):
-            sys.stderr.write("Filter: Wrong format! Should be a list of ASNs (e.g. [1,2,3]) or a single ASN.")
+    if not args.filterAS is None:
+        filterAS = json.loads(args.filterAS)
+        if isinstance(filterAS, int):
+            filterAS = [filterAS]
+        elif not isinstance(filterAS, list):
+            sys.stderr.write("filterAS: Wrong format! Should be a list of ASNs (e.g. [1,2,3]) or a single ASN.")
             sys.exit()
     else:
-        filter = None
+        filterAS = None
+
+    filterPrefix = None
+    if not args.filterCountry  is None:
+        filterPrefix = getPrefixPerCountry(args.filterCountry)
+
+        if len(filterPrefix) == 0:
+            sys.stderr.write("Error: No prefix found for the country code: %s" % args.filterCountry)
+            sys.exit()
 
     try:
         os.makedirs(os.path.dirname(args.output))
@@ -493,25 +518,25 @@ if __name__ == "__main__":
     rtree = None
     g = None
     for ribfile in rib_files:
-        rtree, g = readrib(ribfile, args.spatial, args.af, rtree, filter, args.plot, g)
-        if not filter is None:
+        rtree, g = readrib(ribfile, args.spatial, args.af, rtree, filterAS, filterPrefix, args.plot, g)
+        if not filterAS is None:
             # Need a second pass to account for delegated prefixes
-            rtree, g = readrib(ribfile, args.spatial, args.af, rtree, filter, args.plot, g)
+            rtree, g = readrib(ribfile, args.spatial, args.af, rtree, filterAS, filterPrefix, args.plot, g)
 
         if args.plot:
             # Add centrality values
-            asAggProb, asProb, _ = computeCentrality(rtree.search_exact("0.0.0.0/0").data, args.spatial, filter)
+            asAggProb, asProb, _ = computeCentrality(rtree.search_exact("0.0.0.0/0").data, args.spatial, filterAS, filterPrefix)
             nx.set_node_attributes(g, "AS hegemony", asAggProb)
             # Set nodes color (peers are blue and filtered ASN are red)
             root = rtree.search_exact("0.0.0.0/0")
             nodeColor = {data["peerASN"]:"b" for peer, data in root.data.iteritems() if data["peerASN"] in g}
-            if not filter is None:
-                for asn in filter:
+            if not filterAS is None:
+                for asn in filterAS:
                     nodeColor[str(asn)] = "r"
             nx.set_node_attributes(g, "color", nodeColor) 
             nx.write_gexf(g, args.output+"/graph_start.gexf")
 
-    (currHash, currSketches), currAsProb = computeSimhash(rtree, p, args.N, args.M, args.spatial, filter=filter)
+    (currHash, currSketches), currAsProb = computeSimhash(rtree, p, args.N, args.M, args.spatial, filterAS=filterAS, filterPrefix=filterPrefix)
 
     # initialisation for the figures and output
     hashHistory = {"date":[], "hash":[], "distance":[], "reportedASN":[]}
@@ -551,12 +576,12 @@ if __name__ == "__main__":
                 date = filename.split(".")
 
             sys.stdout.write("\r %s:%s " % (date[1], date[2]))
-            rtree, updateStats = readupdates(fi, rtree, args.spatial, args.af, filter, args.plot, g)
+            rtree, updateStats = readupdates(fi, rtree, args.spatial, args.af, filterAS, filterPrefix, args.plot, g)
 
             outFile.write("%s:%s | %s | %s | %s | %s | %s | " % (date[1], date[2], updateStats["announce"], \
                     updateStats["withdraw"], np.median(updateStats["prefixLen"]), \
                     np.median(updateStats["pathLen"]), len(updateStats["originAS"]) ) )
-            (currHash, currSketches), currAsProb = computeSimhash(rtree, p, args.N, args.M, args.spatial, outFile, filter)
+            (currHash, currSketches), currAsProb = computeSimhash(rtree, p, args.N, args.M, args.spatial, outFile, filterAS, filterPrefix)
 
             if currHash is None:
                 anomalousAsn = []
@@ -589,14 +614,14 @@ if __name__ == "__main__":
     if args.plot :
 
         # Add centrality values
-        asAggProb, asProb, _ = computeCentrality(rtree.search_exact("0.0.0.0/0").data, args.spatial, filter)
+        asAggProb, asProb, _ = computeCentrality(rtree.search_exact("0.0.0.0/0").data, args.spatial, filterAS, filterPrefix)
         prob = {asn:val for asn, val in asAggProb.iteritems() if asn in g}
         nx.set_node_attributes(g, "centrality", prob)
         # Set nodes color (peers are blue and filtered ASN are red)
         root = rtree.search_exact("0.0.0.0/0")
         nodeColor = {data["peerASN"]:"b" for peer, data in root.data.iteritems() if data["peerASN"] in g}
-        if not filter is None:
-            for asn in filter:
+        if not filterAS is None:
+            for asn in filterAS:
                 if str(asn) in g:
                     nodeColor[str(asn)] = "r"
         nx.set_node_attributes(g, "color", nodeColor)

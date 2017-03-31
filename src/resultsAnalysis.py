@@ -133,7 +133,7 @@ def longStats(af = 4, filter=None):
 
         if not os.path.exists(centralityFile):
             rtree, _ = ashash.readrib(ribFile, space, af, filter=fList) 
-            asAggProb, asProb = ashash.computeCentrality(rtree.search_exact("0.0.0.0/0").data, space)
+            asAggProb, asProb, _ = ashash.computeCentrality(rtree.search_exact("0.0.0.0/0").data, space)
             pickle.dump((asAggProb, asProb), open(centralityFile, "wb"))
         else:
             asAggProb, asProb = pickle.load(open(centralityFile,"rb"))
@@ -169,10 +169,10 @@ def longStats(af = 4, filter=None):
     plt.ylabel("CCDF")
     plt.tight_layout()
     if filter is None:
-        plt.title("Entire IPv%s space" % af)
+        plt.title("IPv%s" % af)
         plt.savefig(centralityFile.rpartition("/")[0]+"/hegemonyLongitudinal_af%s.eps" % af)
     else:
-        plt.title("AS%s IPv%s space" % (filter, af))
+        plt.title("AS%s (IPv%s)" % (filter, af))
         plt.savefig(centralityFile.rpartition("/")[0]+"/hegemonyLongitudinal_AS%s_af%s.eps" % (filter, af))
 
     if filter is None and af==4:
@@ -201,7 +201,7 @@ def compareToCaidaRank():
     ribFile = dataDirectory+"2016.06/RIBS/rib.20160601.0000.bz2"
     if not os.path.exists(centralityFile):
         rtree, _ = ashash.readrib(ribFile, space, af) 
-        asAggProb, asProb = ashash.computeCentrality(rtree.search_exact("0.0.0.0/0").data, af)
+        asAggProb, asProb, _ = ashash.computeCentrality(rtree.search_exact("0.0.0.0/0").data, af)
         pickle.dump((asAggProb, asProb), open(centralityFile, "wb"))
     else:
         asAggProb, asProb = pickle.load(open(centralityFile,"rb"))
@@ -459,4 +459,35 @@ def peerSensitivity():
     return (nbPeersList, results)
 
 
+#Top 5 countries (bgp.he.net): 
+# ["JP", "NL", "US", "CN", "PK", "CU", "KP"]
 
+def countryAnalysis(ccList=["US", "CN", "BR", "IN", "RU"]):
+    space = 1
+    af = 4
+    dataDirectory = "/data/routeviews/archive.routeviews.org/route-views.linx/bgpdata/"
+
+    plt.figure()
+    for cc in ccList:
+        print cc
+        centralityFile = "../results/country/20160601.0000_%s.pickle" % cc
+        ribFile = dataDirectory+"2016.06/RIBS/rib.20160601.0000.bz2"
+        if not os.path.exists(centralityFile):
+            prefixes = ashash.getPrefixPerCountry(cc)
+            rtree, _ = ashash.readrib(ribFile, space, af, filterPrefix=prefixes) 
+            asAggProb, asProb, _ = ashash.computeCentrality(rtree.search_exact("0.0.0.0/0").data, af, filterPrefix=prefixes)
+            pickle.dump((asAggProb, asProb), open(centralityFile, "wb"))
+        else:
+            asAggProb, asProb = pickle.load(open(centralityFile,"rb"))
+
+        eccdf(asAggProb.values(), lw=1.3, label=cc )
+
+    plt.xscale("log")
+    plt.yscale("log")
+    plt.xlabel("AS hegemony")
+    plt.ylabel("CCDF")
+    plt.xlim([10**-7, 1.1])
+    # plt.legend()
+    plt.legend(loc="center", bbox_to_anchor=(0.5, 1.1), ncol=len(ccList), fontsize=6)
+    plt.tight_layout()
+    plt.savefig("../results/country/country_hegemonyDist.pdf")
