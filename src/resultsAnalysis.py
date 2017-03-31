@@ -460,9 +460,10 @@ def peerSensitivity():
 
 
 #Top 5 countries (bgp.he.net): 
-# ["JP", "NL", "US", "CN", "PK", "CU", "KP"]
+# ["US", "CN", "BR", "IN", "RU"]
+# 
 
-def countryAnalysis(ccList=["US", "CN", "BR", "IN", "RU"]):
+def countryAnalysis(ccList=["JP", "NL", "US", "CN", "PK", "CU", "KP"]):
     space = 1
     af = 4
     dataDirectory = "/data/routeviews/archive.routeviews.org/route-views.linx/bgpdata/"
@@ -480,14 +481,14 @@ def countryAnalysis(ccList=["US", "CN", "BR", "IN", "RU"]):
         else:
             asAggProb, asProb = pickle.load(open(centralityFile,"rb"))
 
-        eccdf(asAggProb.values(), lw=1.3, label=cc )
+        eccdf(asAggProb.values(), lw=1.3, label=cc , marker="o", ms=3)
 
     plt.xscale("log")
     plt.yscale("log")
     plt.xlabel("AS hegemony")
     plt.ylabel("CCDF")
     plt.xlim([10**-7, 1.1])
-    # plt.legend()
-    plt.legend(loc="center", bbox_to_anchor=(0.5, 1.1), ncol=len(ccList), fontsize=6)
+    plt.legend(loc="best")
+    # plt.legend(loc="center", bbox_to_anchor=(0.5, 1.1), ncol=len(ccList), fontsize=6)
     plt.tight_layout()
     plt.savefig("../results/country/country_hegemonyDist.pdf")
