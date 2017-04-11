@@ -369,6 +369,7 @@ def peerSensitivity():
             nbPeersList, results[metricLabel] = pickle.load(open(resultsFile % metricLabel,"rb"))
         collectorsDist = pickle.load(open(collectorsDataFile,"rb"))
         asHegemonyRef, asBetweennessRef, allFullFeedPeers = pickle.load(open(allPeersFile,"rb"))
+        #return asHegemonyRef
 
     def plotRef(references, legendFmt="%s", alpha=1.0):
         for asDistRef, metricLabel, color in references:
@@ -463,7 +464,7 @@ def peerSensitivity():
 # ["US", "CN", "BR", "IN", "RU"]
 # 
 
-def countryAnalysis(ccList=["JP", "NL", "US", "CN", "PK", "CU", "KP"]):
+def countryAnalysis(ccList=["US","CN","JP", "NL", "PK", "CU", "KP","DE"]):
     space = 1
     af = 4
     dataDirectory = "/data/routeviews/archive.routeviews.org/route-views.linx/bgpdata/"
@@ -482,6 +483,12 @@ def countryAnalysis(ccList=["JP", "NL", "US", "CN", "PK", "CU", "KP"]):
             asAggProb, asProb = pickle.load(open(centralityFile,"rb"))
 
         eccdf(asAggProb.values(), lw=1.3, label=cc , marker="o", ms=3)
+
+        sortedAS = sorted(asAggProb, key=lambda k: asAggProb[k], reverse=True) 
+        i=0
+        while asAggProb[sortedAS[i]]>.05:
+            print "%s: %s" % (sortedAS[i], asAggProb[sortedAS[i]])
+            i+=1
 
     plt.xscale("log")
     plt.yscale("log")
