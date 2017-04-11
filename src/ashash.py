@@ -21,6 +21,8 @@ import mmh3
 import requests
 import json
 import networkx as nx
+import itertools
+from  more_itertools import unique_justseen
 
 def findParent(node, zOrig):
     parent = node.parent
@@ -77,8 +79,8 @@ def readrib(ribfile, spatialResolution=1, af=4, rtree=None, filterAS=None, filte
                 covered = True
                 filteredOrig = True
                 node = rtree.search_exact(zPfx)
-
-                if node is None and rtree.search_best(zPfx).prefixlen==0:
+                best = rtree.search_best(zPfx)
+                if best is None or (node is None and best.prefixlen==0):
                     # No peer has seen this prefix
                     # And it is not covered by known prefixes
                     covered = False
@@ -445,6 +447,84 @@ def compareSimhash(prevHash, curHash, prevSketches, currSketches, minVotes,  dis
     anomalousAsn = [(asn, count, diff[asn]) for asn, count in votes.iteritems() if count >= minVotes and diff[asn]]
 
     return anomalousAsn, nbAnomalousSketches, cumDistance
+
+
+def detectValley(asAggProb, filename, af=4):
+
+    anomalousPaths = {}
+    anomalousPrefixes = set()
+    anomalousOrigins = set()
+    anomalousTransit = defaultdict(int)
+    nbAnnounce = 0
+    if filename.startswith("@bgpstream:"):
+        p1 = Popen(["bgpreader", "-m", "-w", filename.rpartition(":")[2], "-p", "routeviews", "-c", "route-views.linx", "-t", "updates"], stdout=PIPE)
+    else:
+        p1 = Popen(["bgpdump", "-m", "-v", filename],  stdout=PIPE, bufsize=-1)
+    
+    for line in p1.stdout:
+        res = line[:-1].split('|',15)
+
+        if res[5] == "0.0.0.0/0":
+            continue
+        
+        if af != 0:
+            if af == 4 and ":" in res[5]:
+                continue
+            elif af == 6 and "." in res[5]:
+                continue
+
+        if res[2] == "W":
+            continue
+        else:
+            nbAnnounce+=1
+            zTd, zDt, zS, zOrig, zAS, zPfx, sPath, zPro, zOr, z0, z1, z2, z3, z4, z5 = res
+
+            path = list(unique_justseen(sPath.split(" ")))
+
+            try :
+                hegeAll = map(lambda x: round(asAggProb[x],3), path[1:-1])
+                hege = list(unique_justseen(hegeAll))
+            except Exception:
+                # print path
+                # print "New AS"
+                continue
+
+            hegeDiff = np.diff(hege)
+            signChange = len(list(itertools.groupby(hegeDiff, lambda x: x >= 0)))
+
+            if signChange > 2: # and not "27064" in path and  not "27065" in path and not "27066" in path:
+                pathKey = str(path[1:])+" "+zPfx
+                if not pathKey in anomalousPaths.keys():
+                    anomalousPaths[pathKey] = hege
+                    anomalousPrefixes.add(zPfx)
+                    anomalousOrigins.add(path[-1])
+
+                    print zPfx
+                    print path
+                    print hegeAll
+                    print hegeDiff
+                    # Find suspicious transit AS
+                    prev = hegeAll[0]
+                    goingDown = False
+                    for i, d in enumerate(hegeAll[1:]):
+                        if goingDown and d>prev:
+                            anomalousTransit[path[i+1]]+=1 #+1 because we ignore the peer AS in hegeAll
+                            print path[i+1]
+
+                        if d >= prev:
+                            goingDown = False
+                        else:
+                            goingDown = True
+
+                        prev=d
+
+                    print signChange
+
+    print "Number of anomalous paths: %s (out of %s)" % (len(anomalousPaths), nbAnnounce)
+    print "Number of anomalous prefixes: %s" % len(anomalousPrefixes)
+    print "Number of anomalous origin AS: %s" % len(anomalousOrigins)
+    print "Number of anomalous transit AS: %s" % len(anomalousTransit)
+    print "Anomalous transit AS:\n %s" % (anomalousTransit)
 
 
 def getPrefixPerCountry(cc):

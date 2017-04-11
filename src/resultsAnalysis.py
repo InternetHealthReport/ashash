@@ -92,8 +92,8 @@ def longStats(af = 4, filter=None):
     
     space = 1
     yearRange = range(2004, 2017)
-    monthRange = range(1,13)
-    # monthRange = [6] #range(1,13)
+    #monthRange = range(1,13)
+    monthRange = [6] #range(1,13)
     day = 15
     dateRange = []
 
@@ -132,8 +132,8 @@ def longStats(af = 4, filter=None):
             fList = [filter]
 
         if not os.path.exists(centralityFile):
-            rtree, _ = ashash.readrib(ribFile, space, af, filter=fList) 
-            asAggProb, asProb, _ = ashash.computeCentrality(rtree.search_exact("0.0.0.0/0").data, space)
+            rtree, _ = ashash.readrib(ribFile, space, af, filterAS=fList) 
+            asAggProb, asProb, _ = ashash.computeCentrality(rtree.search_exact("0.0.0.0/0").data, space, filterAS=filter)
             pickle.dump((asAggProb, asProb), open(centralityFile, "wb"))
         else:
             asAggProb, asProb = pickle.load(open(centralityFile,"rb"))
@@ -463,7 +463,7 @@ def peerSensitivity():
 # ["US", "CN", "BR", "IN", "RU"]
 # 
 
-def countryAnalysis(ccList=["JP", "NL", "US", "CN", "PK", "CU", "KP"]):
+def countryAnalysis(ccList=["JP", "NL", "US", "CN", "PK", "CU", "KP","DE"]):
     space = 1
     af = 4
     dataDirectory = "/data/routeviews/archive.routeviews.org/route-views.linx/bgpdata/"
@@ -492,3 +492,17 @@ def countryAnalysis(ccList=["JP", "NL", "US", "CN", "PK", "CU", "KP"]):
     # plt.legend(loc="center", bbox_to_anchor=(0.5, 1.1), ncol=len(ccList), fontsize=6)
     plt.tight_layout()
     plt.savefig("../results/country/country_hegemonyDist.pdf")
+
+
+def testPath():
+    space = 1
+    af = 4
+
+    outDir = "../results/longStats_space%s_ipv%s/" % (space, af)
+    dataDirectory = "/data/routeviews/archive.routeviews.org/route-views.linx/bgpdata/"
+    updateFile = dataDirectory+"2016.06/UPDATES/updates.20160601.0000.bz2"
+
+    centralityFile = outDir+"/%s%02d%02d_af%s.pickle" % (2016, 6, 15, af)
+    asAggProb, asProb = pickle.load(open(centralityFile,"rb"))
+
+    ashash.detectValley(asAggProb, updateFile) 
