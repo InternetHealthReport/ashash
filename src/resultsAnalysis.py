@@ -16,6 +16,7 @@ import errno
 import scipy
 from collections import OrderedDict
 import statsmodels.stats.api as sms
+from  more_itertools import unique_justseen
 
 def ecdf(a, **kwargs):
     sorted=np.sort( a )
@@ -124,6 +125,7 @@ def longStats(af = 4, filter=None):
     CS3 = plt.contourf(Z, yearRange, cmap=ccmap)
     plt.clf()
     for i, (date, ribFile) in enumerate(ribFiles):
+        print date
         if filter is None:
             centralityFile = outDir+"/%s%02d%02d_af%s.pickle" % (date[0], date[1], date[2], af)
             fList = None
@@ -148,6 +150,13 @@ def longStats(af = 4, filter=None):
         if not filter is None:
             del asAggProb[str(filter)]
 
+
+        sortedAS = sorted(asAggProb, key=lambda k: asAggProb[k], reverse=True) 
+        i=0
+        while i<len(sortedAS) and asAggProb[sortedAS[i]]>.05:
+            print "%s: %s" % (sortedAS[i], asAggProb[sortedAS[i]])
+            i+=1
+
         eccdf(asAggProb.values(), lw=1.3, label=date[0],c=ccmap(i/float(len(ribFiles)) ) )
         # print date
         # maxKey = max(asAggProb, key=asAggProb.get)
@@ -163,7 +172,7 @@ def longStats(af = 4, filter=None):
     if filter is None:
         plt.xlim([10**-7, 1.1])
     else:
-        plt.xlim([10**-4, 1.1])
+        plt.xlim([10**-7, 1.1])
     # plt.ylim([10**-3, 1.1])
     plt.xlabel("AS hegemony")
     plt.ylabel("CCDF")
@@ -501,15 +510,100 @@ def countryAnalysis(ccList=["US","CN","JP", "NL", "PK", "CU", "KP","DE"]):
     plt.savefig("../results/country/country_hegemonyDist.pdf")
 
 
-def testPath():
+
+def pathDerivativeDist():
     space = 1
     af = 4
 
     outDir = "../results/longStats_space%s_ipv%s/" % (space, af)
     dataDirectory = "/data/routeviews/archive.routeviews.org/route-views.linx/bgpdata/"
-    updateFile = dataDirectory+"2016.06/UPDATES/updates.20160601.0000.bz2"
+    filename = dataDirectory+"2016.06/UPDATES/updates.20160601.0000.bz2"
 
     centralityFile = outDir+"/%s%02d%02d_af%s.pickle" % (2016, 6, 15, af)
     asAggProb, asProb = pickle.load(open(centralityFile,"rb"))
 
-    ashash.detectValley(asAggProb, updateFile) 
+    allDiff = []
+    linDiff = []
+    if filename.startswith("@bgpstream:"):
+        p1 = Popen(["bgpreader", "-m", "-w", filename.rpartition(":")[2], "-p", "routeviews", "-c", "route-views.linx", "-t", "updates"], stdout=PIPE)
+    else:
+        p1 = Popen(["bgpdump", "-m", "-v", filename],  stdout=PIPE, bufsize=-1)
+    
+    for line in p1.stdout:
+        res = line[:-1].split('|',15)
+
+        if res[5] == "0.0.0.0/0":
+            continue
+        
+        if af != 0:
+            if af == 4 and ":" in res[5]:
+                continue
+            elif af == 6 and "." in res[5]:
+                continue
+
+        if res[2] == "W":
+            continue
+        else:
+            zTd, zDt, zS, zOrig, zAS, zPfx, sPath, zPro, zOr, z0, z1, z2, z3, z4, z5 = res
+
+            path = list(unique_justseen(sPath.split(" ")))
+
+            try :
+                # hegeAll = map(lambda x: round(asAggProb[x],3), path[1:-1])
+                hegeAll = map(lambda x: asAggProb[x], path)
+                hegeDiff = np.diff(hegeAll)
+                allDiff.extend(list(hegeDiff))
+                
+                N = 11
+                dim = np.linspace(0,1,N)
+                interpData = np.interp(dim, np.linspace(0,1,len(hegeAll)), hegeAll)
+                linDiff.append(interpData)
+            except Exception:
+                # print path
+                # print "New AS"
+                continue
+
+    plt.figure()
+    ecdf(allDiff)
+    plt.xlim([-0.1, 0.1])
+    plt.xlabel("Hegemony derivative")
+    plt.ylabel("CDF")
+    plt.tight_layout()
+    plt.savefig("../results/pathDerivative/derivativeDist.pdf")
+
+    lda = np.array(linDiff)
+    plt.figure()
+    # plt.plot(dim, lda.mean(axis=0),"o-")
+    plt.errorbar(dim, lda.mean(axis=0), lda.std(axis=0)/np.sqrt(N), fmt="o-")
+    plt.xlabel("Relative position in the path")
+    plt.ylabel("AS hegemony")
+    plt.xlim([-0.03, 1.03])
+    plt.tight_layout()
+    plt.savefig("../results/pathDerivative/meanHegemony.pdf")
+
+
+    return lda
+
+
+def testPath():
+    space = 1
+    af = 4
+    outDir = "../results/longStats_space%s_ipv%s/" % (space, af)
+    dataDirectory = "/data/routeviews/archive.routeviews.org/route-views.linx/bgpdata/"
+    # dataDirectory = "/data/routeviews/archive.routeviews.org/bgpdata/"
+
+    allRes = {}
+    centralityFile = outDir+"/%s%02d%02d_af%s.pickle" % (2015, 6, 15, af)
+    asAggProb, asProb = pickle.load(open(centralityFile,"rb"))
+
+    for day in range(1,31):
+        for hour in range(24):
+            for time in [0,15,30,45]:
+                date = "201506%02d.%02d%02d" % (day, hour, time)
+                print date
+                updateFile = dataDirectory+"2015.06/UPDATES/updates.%s.bz2" % date
+
+                res = ashash.detectValley(asAggProb, updateFile) 
+                allRes[date] = res
+
+    return allRes
