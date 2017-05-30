@@ -1,5 +1,7 @@
 import argparse
+import os
 import sys
+import logging
 import errno
 from collections import deque
 from datetime import datetime
@@ -13,7 +15,7 @@ import graphMonitor
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("-a","--af", help="address family (4, 6, or 0 for both)", type=int, default=4)
+parser.add_argument("-a","--af", help="address family (4, 6)", type=int, default=4)
 parser.add_argument("-N", help="number of hash functions for sketching", type=int, default=16)
 parser.add_argument("-M", help="number of sketches per hash function", type=int, default=128)
 parser.add_argument("-d","--distThresh", help="simhash distance threshold", type=int, default=3)
@@ -25,7 +27,7 @@ parser.add_argument("-s", "--spatial", help="spatial resolution (0 for prefix, 1
 parser.add_argument("-w", "--window", help="Time window: time resolution in seconds (works only with  bgpstream)", type=int, default=900)
 parser.add_argument("ribs", help="RIBS files")
 parser.add_argument("updates", help="UPDATES files", nargs="+")
-parser.add_argument("output", help="output directory")
+# parser.add_argument("output", help="output directory")
 args = parser.parse_args()
 
 
@@ -33,45 +35,46 @@ args = parser.parse_args()
 if args.proc is None:
     args.proc = args.N
 
-try:
-    os.makedirs(os.path.dirname(args.output))
-except OSError as exc: # Guard against race condition
-    if exc.errno != errno.EEXIST:
-        raise
+# try:
+    # os.makedirs(os.path.dirname(args.output))
+# except OSError as exc: # Guard against race condition
+    # if exc.errno != errno.EEXIST:
+        # raise
 
 # p=Pool(args.proc)
+FORMAT = '%(asctime)s %(message)s'
+logging.basicConfig(format=FORMAT, filename='ashash.log', level=logging.DEBUG, datefmt='%Y-%m-%d %H:%M:%S')
 
 announceQueue = Queue.Queue(5000)
 countQueue = Queue.Queue(10)
 hegemonyQueue = Queue.Queue(10)
 hegemonyQueuePM = Queue.Queue(10)
-hegemonyQueueGM = Queue.Queue(10)
+hegemonyQueueGM = Queue.Queue(1000)
 
 # Analysis Modules
-pc = pathCounter.pathCounter(arg.ribs, args.updates, announceQueue, countQueue, spatialResolution=args.spatial, af=args.af, filterAS=filterAS )
+pc = pathCounter.pathCounter(args.ribs, args.updates, announceQueue, countQueue, spatialResolution=args.spatial, af=args.af, timeWindow=args.window)
 pm = pathMonitor.pathMonitor(hegemonyQueuePM, announceQueue)
+gm = graphMonitor.graphMonitor(hegemonyQueueGM, args.N, args.M, args.distThresh, args.minVoteRatio, args.proc)
 ash = asHegemony.asHegemony(countQueue, hegemonyQueue)
 
-#TODO 
-(currHash, currSketches), currAsProb = computeSimhash(rtree, p, args.N, args.M, args.spatial, filterAS=filterAS, filterPrefix=filterPrefix)
-
-pm.run()
-ash.run()
-pc.run()
+pm.start()
+gm.start()
+ash.start()
+pc.start()
 
 # Broadcast AS hegemony results to pathMonitor and graphMonitor
-while True:
+while pm.isAlive() or not hegemonyQueue.empty():
     elem = hegemonyQueue.get()
-    if elem[1] = "total":
+    if elem[1] == "total":
         hegemonyQueuePM.put( elem )
-    hegemonyQueueGM.put( elem )
+        hegemonyQueueGM.put( elem )
 
+pc.join()
+announceQueue.join()
+countQueue.join()
+hegemonyQueueGM.join()
 
-
-
-
-
-
+logging.info("Good bye!")
 # # initialisation for the figures and output
 # outFile = open(args.output+"/results_ip.txt","w")
 # refAsProb = defaultdict(lambda : deque(maxlen=args.historyDuration*len(root.data)))

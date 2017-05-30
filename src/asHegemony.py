@@ -1,25 +1,35 @@
 import threading
+import logging
 from scipy import stats
+from collections import defaultdict
+import numpy as np
 
 class asHegemony(threading.Thread):
-    def __init__(countQueue, hegemonyQueue. alpha=0.1):
-        treading.Thread.__init__(self)
+    def __init__(self, countQueue, hegemonyQueue, alpha=0.1):
+        threading.Thread.__init__(self)
         self.countQueue = countQueue
         self.hegemonyQueue = hegemonyQueue
         self.alpha = alpha
+        self.daemon = True
+
 
     def run(self):
         while True:
+            logging.debug("(AS hegemony) waiting for data")
             ts, peers, counts = self.countQueue.get()
 
             # AS hegemony for the global graph
+            logging.debug("(AS hegemony) making global graph hegemony")
             hege, _ = self.asHegemony(peers, counts["all"])
             self.hegemonyQueue.put( (ts, "total", hege) )
 
             # AS hegemony for graph bound to originating AS
-            for asn, count in  counts["origAS"].iteritems():
-                hege, _ = self.asHegemony(peers, count)
-                self.hegemonyQueue.put( (ts, "origAS", hege) )
+            logging.debug("(AS hegemony) making local graphs hegemony")
+            # for asn, count in  counts["origas"].iteritems():
+                # hege, _ = self.asHegemony(peers, count)
+                # self.hegemonyQueue.put( (ts, asn, hege) )
+
+            self.countQueue.task_done()
 
 
     def asHegemony(self, peers, counter):
@@ -28,7 +38,7 @@ class asHegemony(threading.Thread):
 
         # Compute betweenness centrality for each peer 
         for asn in asList:
-            asProb[asn] = [counter["asn"][asn][p]/float(counter["total"][p]) for p in peers]
+            asProb[asn] = [counter["asn"][asn][p]/float(counter["total"][p]) if counter["total"][p]>0 else 0.0 for p in peers]
 
         # Adaptively filter low/high betweenness centrality scores
         asAggProb = {asn:float(stats.trim_mean(problist, self.alpha))for asn, problist in asProb.iteritems()}

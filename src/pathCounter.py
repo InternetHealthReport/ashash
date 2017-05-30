@@ -11,21 +11,21 @@ import logging
 def pathCountDict():
     return {"total": defaultdict(int), "asn": defaultdict(lambda : defaultdict(int)) ,}
 
-__nbaddr = {4:{i: 2**(32-i) for i in range(33) }, 6: {i: 2**(128-i) for i in range(129) }}
 
 class pathCounter(threading.Thread):
 
-    def __init__(self, ribfile, updatefile, announceQueue, countQueue, spatialResolution=1, af=4, filterAS=None, pathCountDB="pathCount.db"):
+    def __init__(self, ribfile, updatefile, announceQueue, countQueue, spatialResolution=1, af=4, timeWindow=900 ):
         threading.Thread.__init__ (self)
+        self.__nbaddr = {4:{i: 2**(32-i) for i in range(33) }, 6: {i: 2**(128-i) for i in range(129) }}
 
         self.ribfile = ribfile
-        self.updatefile = updatefile
+        self.updatefiles = updatefile
         self.announceQueue = announceQueue
         self.countQueue = countQueue
 
         self.spatialResolution = spatialResolution
         self.af = af
-        self.filterAS = filterAS
+        self.timeWindow = timeWindow
 
         self.rtree = radix.Radix()
         root = self.rtree.add("0.0.0.0/0")
@@ -33,40 +33,21 @@ class pathCounter(threading.Thread):
         self.ts = None
 
         self.counter = {
-                "all": pathCountDict,
+                "all": pathCountDict(),
                 "origas": defaultdict(pathCountDict),
                 }
-        # self.conn = apsw.Connection(":memory:", statementcachesize=500000)
-        # # Initialize the database
-        # self.cursor = self.conn.cursor()
-        # ## tables for the whole graph
-        # self.cursor.execute("CREATE TABLE IF NOT EXISTS all_total (date integer NOT NULL, peerip text, count integer default 0)")
-        # self.cursor.execute("CREATE TABLE IF NOT EXISTS all_asn (date integer NOT NULL, peerip text, asn integer, count integer default 0)")
-        # self.cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_peerip ON all_total (peerip)")
-        # self.cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_peerip_asn ON all_asn (peerip, asn)")
-
-        # ## tables for "origin AS" graphs
-        # self.cursor.execute("CREATE TABLE IF NOT EXISTS origas_total (date integer NOT NULL, peerip text, origas integer, count integer default 0)")
-        # self.cursor.execute("CREATE TABLE IF NOT EXISTS origas_asn (date integer NOT NULL, peerip text, origas integer, asn integer, count integer default 0)")
-        # self.cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_peerip_origas ON origas_total (peerip, origas)")
-        # self.cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_peerip_origas_asn ON origas_asn (peerip, origas, asn)")
-
-        # ## tables for "peer AS" graphs
-        # self.cursor.execute("CREATE TABLE IF NOT EXISTS peeras_total (date integer NOT NULL, peerip text, peeras integer, count integer default 0)")
-        # self.cursor.execute("CREATE TABLE IF NOT EXISTS peeras_asn (date integer NOT NULL, peerip text, peeras integer, asn integer, count integer default 0)")
-        # self.cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_peerip_peeras ON peeras_total (peerip, peeras)")
-        # self.cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_peerip_peeras_asn ON peeras_asn (peerip, peeras, asn)")
 
 
     def run(self):
         logging.info("Reading RIB files...")
         self.readrib()
         logging.info("Reading UPDATE files...")
-        self.readupdates()
+        for updatefile in self.updatefiles:
+            self.readupdates(updatefile)
 
 
     def nbIPs(self, prefixlen):
-        return __nbaddr[self.af][prefixlen]
+        return self.__nbaddr[self.af][prefixlen]
 
 
     def findParent(self, node, zOrig):
@@ -79,53 +60,40 @@ class pathCounter(threading.Thread):
             return self.findParent(parent, zOrig)
 
     def slideTimeWindow(self,ts):
+        logging.debug("(pathCounter) sliding window...")
         if self.af == 4:
-            peers = [peer for peer, count in self.counter["all"]["total"].iteritems() if count > 400000]
-        else self.af == 6:
-            peers = [peer for peer, count in self.counter["all"]["total"].iteritems() if count > 1000000000]
+            minNbEntries = 400000
+        elif self.af == 6:
+            minNbEntries = 1000000000 
 
-        self.countQueue.put( (self.ts, peers, copy.deepcopy(self.counter)) )
+        peers = [peer for peer, count in self.counter["all"]["total"].iteritems() if count > minNbEntries]
+
+        logging.debug("(pathCounter) push data")
+        # self.countQueue.put( (self.ts, peers, copy.deepcopy(self.counter)) )
+        self.countQueue.put( (self.ts, peers, self.counter) )
+        self.countQueue.join()
         self.ts = ts
+        
+        logging.debug("(pathCounter) window slided")
+
 
     def incTotalCount(self, count, peerip, origAS, zAS):
         self.counter["all"]["total"][peerip] += count
-        self.counter["origas"][origAS]["total"][peerip] += count
-        # self.cursor.execute("INSERT OR IGNORE INTO all_total (date, peerip) VALUES (?,?)", (self.ts, zOrig))
-        # self.cursor.execute("UPDATE all_total SET count = count + ? WHERE date=? AND peerip=?", (count, self.ts, zOrig))
-        # self.cursor.execute("INSERT OR IGNORE INTO origas_total (date, peerip, origas) VALUES (?,?,?)", (self.ts, zOrig, origAS) )
-        # self.cursor.execute("UPDATE origas_total SET count = count + ? WHERE date=? AND peerip=? AND origas=?", (count, self.ts, zOrig, origAS) )
-        # self.cursor.execute("INSERT OR IGNORE INTO peeras_total (date, peerip, peeras) VALUES (?,?,?)", (self.ts, zOrig, zAS) )
-        # self.cursor.execute("UPDATE peeras_total SET count = count + ? WHERE date=? AND peerip=? AND peeras=?", (count, self.ts, zOrig, zAS) )
+        # self.counter["origas"][origAS]["total"][peerip] += count
+
 
     def incCount(self, count, peerip, origAS, peerAS, asns):
         for asn in asns:
             self.counter["all"]["asn"][asn][peerip] += count
-            self.counter["origas"][origAS]["asn"][asn][peerip] += count
-
-        # counts = [count]*len(asns)
-        # tss = [self.ts]*len(asns)
-        # peerips = [zOrig]*len(asns)
-        # porigass = [pOrigAS]*len(asns)
-        # peerass = [zAS]*len(asns)
-        # self.cursor.executemany("INSERT OR IGNORE INTO all_asn (date, peerip, asn) VALUES (?,?,?)", zip(tss, peerips, asns))
-        # self.cursor.executemany("UPDATE all_asn SET count = count + ? WHERE date=? AND peerip=? AND asn=?", zip(counts, tss, peerips, asns))
-        # self.cursor.executemany("INSERT OR IGNORE INTO origas_asn (date, peerip, origas, asn) VALUES (?,?,?,?)", zip(tss, peerips, porigass, asns) )
-        # self.cursor.executemany("UPDATE origas_asn SET count = count + ? WHERE date=? AND peerip=? AND origas=? AND asn=?", zip(counts, tss, peerips, porigass, asns))
-        # self.cursor.executemany("INSERT OR IGNORE INTO peeras_asn (date, peerip, peeras, asn) VALUES (?,?,?,?)",  zip(tss, peerips, peerass, asns))
-        # self.cursor.executemany("UPDATE peeras_asn SET count = count + ? WHERE date=? AND peerip=? AND peeras=? AND asn=?", zip(counts, tss, peerips, peerass, asns))
+            # self.counter["origas"][origAS]["asn"][asn][peerip] += count
 
 
     def readrib(self):
 
-        # self.cursor.execute("begin transaction;")
-        if not self.filterAS is None:
-            # Need a second pass to account for delegated prefixes
-            self.readrib()
-
         root = self.rtree.search_exact("0.0.0.0/0")
 
         if self.ribfile.startswith("@bgpstream:"):
-            p1 = Popen(["bgpreader","-m", "-w",self.ribfile.rpartition(":")[2], "-p", "routeviews", "-c","route-views.linx", "-t","ribs"], stdout=PIPE)
+            p1 = Popen(["bgpreader","-m", "-w",self.ribfile.rpartition(":")[2], "-p", "routeviews", "-c","route-views.wide", "-t","ribs"], stdout=PIPE)
         else:
             p1 = Popen(["bgpdump", "-m", "-v", "-t", "change", self.ribfile], stdout=PIPE, bufsize=-1)
 
@@ -142,40 +110,10 @@ class pathCounter(threading.Thread):
 
             # set first time bin!
             if self.ts is None:
-                self.ts = zDt
+                self.ts = int(zDt)
 
             path = sPath.split(" ")
             origAS = path[-1]
-
-            # Check if the origin AS is in filterAS:
-            if not self.filterAS is None:
-                try:
-                    # Check if the prefixes has been announced by filtered ASs or
-                    # if the origin AS is in the filter 
-                    
-                    covered = True
-                    filteredOrig = True
-                    node = self.rtree.search_exact(zPfx)
-                    best = self.rtree.search_best(zPfx)
-                    if best is None or (node is None and best.prefixlen==0):
-                        # No peer has seen this prefix
-                        # And it is not covered by known prefixes
-                        covered = False
-
-                    try:
-                        if not int(origAS) in self.filterAS:
-                            filteredOrig = False
-                    except ValueError:
-                        # TODO: handle cases for origin from a set of ASs?
-                        filteredOrig = False
-
-                    if not covered and not filteredOrig:
-                        continue
-
-                except ValueError:
-                    # TODO: handle cases for origin from a set of ASs?
-                    continue
-
 
             node = self.rtree.add(zPfx)
             node.data[zOrig] = {"path": set(path), "count": 0, "origAS":origAS}
@@ -207,13 +145,12 @@ class pathCounter(threading.Thread):
         # self.cursor.execute("commit;")
 
 
-    def readupdates(self):
-        # self.cursor.execute("begin transaction;")
+    def readupdates(self, updatefile):
 
-        if self.updatefile.startswith("@bgpstream:"):
-            p1 = Popen(["bgpreader", "-m", "-w", self.updatefile.rpartition(":")[2], "-p", "routeviews", "-c", "route-views.linx", "-t", "updates"], stdout=PIPE)
+        if updatefile.startswith("@bgpstream:"):
+            p1 = Popen(["bgpreader", "-m", "-w", updatefile.rpartition(":")[2], "-p", "routeviews", "-c", "route-views.wide", "-t", "updates"], stdout=PIPE)
         else:
-            p1 = Popen(["bgpdump", "-m", "-v", self.updatefile],  stdout=PIPE, bufsize=-1)
+            p1 = Popen(["bgpdump", "-m", "-v", updatefile],  stdout=PIPE, bufsize=-1)
         
         for line in p1.stdout:
             res = line[:-1].split('|',15)
@@ -225,11 +162,12 @@ class pathCounter(threading.Thread):
                 continue
             elif self.af == 6 and "." in res[5]:
                 continue
+            
+            msgTs = int(res[1])
+            if self.ts + self.timeWindow < msgTs:
+                self.slideTimeWindow(msgTs)
 
-            if self.ts + self.timeWindow < res[1]:
-                self.slideTimeWindow(int(res[1]))
-
-            if self.ts > res[1]:
+            if self.ts > msgTs:
                 #Old update, ignore this to update the graph
                 logging.warn("Ignoring old update (peer IP: %s, timestamp: %s, current time bin: %s" % (res[3], res[1], self.ts))
                 continue
@@ -273,32 +211,9 @@ class pathCounter(threading.Thread):
                 zTd, zDt, zS, zOrig, zAS, zPfx, sPath, zPro, zOr, z0, z1, z2, z3, z4, z5 = res
                 path = sPath.split(" ")
 
-                self.announceQueue.put(zTd, zDt, zS, zOrig, zAS, zPfx, path, zPro, zOr, z0, z1, z2, z3, z4, z5 )
+                self.announceQueue.put( (zTd, zDt, zS, zOrig, zAS, zPfx, path, zPro, zOr, z0, z1, z2, z3, z4, z5 ) )
 
                 origAS = path[-1]
-                # Check if the origin AS is in the filterAS:
-                if not self.filterAS is None:
-                    # Check if the prefixes has been announced by filtered ASs or
-                    # if the origin AS is in the filter 
-                    
-                    covered = True
-                    filteredOrig = True
-
-                    if node is None and self.rtree.search_best(res[5]).prefixlen==0:
-                        # No peer has seen this prefix
-                        # And it is not covered by known prefixes
-                        covered = False
-
-                    try:
-                        if not int(origAS) in self.filterAS:
-                            filteredOrig = False
-                    except ValueError:
-                        # TODO: handle cases for origin from a set of ASs?
-                        filteredOrig = False
-
-                    if not covered and not filteredOrig:
-                        continue
-
 
                 # Announce:
                 if node is None or not zOrig in node.data or not len(node.data[zOrig]["path"]):
