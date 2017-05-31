@@ -31,6 +31,7 @@ class pathCounter(threading.Thread):
         root = self.rtree.add("0.0.0.0/0")
 
         self.ts = None
+        self.peers = None
 
         self.counter = {
                 "all": pathCountDict(),
@@ -41,6 +42,11 @@ class pathCounter(threading.Thread):
     def run(self):
         logging.info("Reading RIB files...")
         self.readrib()
+        self.peers = self.findFullFeeds()
+        #clean counts from non-full feed peers ?
+        self.cleanUnusedCounts()
+        #TODO get full feed peers ASN, and filter with bgpreader
+        #TODO select only one peer per ASN?
         logging.info("Reading UPDATE files...")
         for updatefile in self.updatefiles:
             self.readupdates(updatefile)
@@ -59,18 +65,50 @@ class pathCounter(threading.Thread):
         else:
             return self.findParent(parent, zOrig)
 
+    def findFullFeeds(self):
+        logging.debug("(pathCounter) finding full feed peers...")
+        nbPrefixes = defaultdict(int)
+        nodes = self.rtree.nodes()
+
+        for node in self.rtree.nodes():
+            for peer in node.data.keys():
+                nbPrefixes[peer] += 1
+
+        res = set([peer for peer, nbPfx in nbPrefixes.iteritems() if nbPfx>len(nodes)*0.75])
+        logging.debug("(pathCounter) %s full feed peers" % len(res))
+
+        return res
+
+    def cleanUnusedCounts(self):
+
+        toRemove = [peer for peer in self.counter["all"]["total"].keys() if not peer in self.peers]
+        for peer in toRemove:
+            # Remove from counter["all"]["total"]
+            del self.counter["all"]["total"][peer]
+            # Remove from counter["all"]["asn"]
+            for asn, d in self.counter["all"]["asn"].iteritems():
+                if peer in d:
+                    del d[peer]
+
+            for node in self.rtree.nodes():
+                if peer in node.data:
+                    origAS = node.data[peer]["origAS"]
+                    # Remove from counter["origas"][..]["total"]
+                    if peer in self.counter["origas"][origAS]["total"]:
+                        del self.counter["origas"][origAS]["total"][peer]
+                    del node.data[peer]
+
+                    # Remove from counter["origas"][..]["asn"]
+                    for asn, d in self.counter["origas"][origAS]["asn"].iteritems():
+                        if peer in d:
+                            del d[peer]
+
+
     def slideTimeWindow(self,ts):
         logging.debug("(pathCounter) sliding window...")
-        if self.af == 4:
-            minNbEntries = 400000
-        elif self.af == 6:
-            minNbEntries = 1000000000 
 
-        peers = [peer for peer, count in self.counter["all"]["total"].iteritems() if count > minNbEntries]
-
-        logging.debug("(pathCounter) push data")
         # self.countQueue.put( (self.ts, peers, copy.deepcopy(self.counter)) )
-        self.countQueue.put( (self.ts, peers, self.counter) )
+        self.countQueue.put( (self.ts, self.peers, self.counter) )
         self.countQueue.join()
         self.ts = ts
         
@@ -79,13 +117,13 @@ class pathCounter(threading.Thread):
 
     def incTotalCount(self, count, peerip, origAS, zAS):
         self.counter["all"]["total"][peerip] += count
-        # self.counter["origas"][origAS]["total"][peerip] += count
+        self.counter["origas"][origAS]["total"][peerip] += count
 
 
     def incCount(self, count, peerip, origAS, peerAS, asns):
         for asn in asns:
             self.counter["all"]["asn"][asn][peerip] += count
-            # self.counter["origas"][origAS]["asn"][asn][peerip] += count
+            self.counter["origas"][origAS]["asn"][asn][peerip] += count
 
 
     def readrib(self):
@@ -135,6 +173,8 @@ class pathCounter(threading.Thread):
                     pOrigAS = parent.data[zOrig]["origAS"]
                     asns = parent.data[zOrig]["path"]
                     self.incCount(-count, zOrig, pOrigAS, zAS, asns)
+                    self.incTotalCount(-count, zOrig, pOrigAS, zAS)
+                    self.incTotalCount(count, zOrig, origAS, zAS)
             
             else: 
                 self.incTotalCount(count, zOrig, origAS, zAS)
@@ -142,8 +182,6 @@ class pathCounter(threading.Thread):
             asns = node.data[zOrig]["path"]
             self.incCount(count, zOrig, origAS, zAS, asns)
         
-        # self.cursor.execute("commit;")
-
 
     def readupdates(self, updatefile):
 
@@ -154,7 +192,9 @@ class pathCounter(threading.Thread):
         
         for line in p1.stdout:
             res = line[:-1].split('|',15)
+            zOrig = res[3]
 
+            
             if res[5] == "0.0.0.0/0":
                 continue
             
@@ -175,7 +215,6 @@ class pathCounter(threading.Thread):
             node = self.rtree.search_exact(res[5])
 
             if res[2] == "W":
-                zOrig = res[3]
                 zAS = res[4]
                 # Withdraw: remove the corresponding node
                 if not node is None and zOrig in node.data and len(node.data[zOrig]["path"]):
@@ -194,6 +233,8 @@ class pathCounter(threading.Thread):
                             porigAS = parent.data[zOrig]["origAS"]
                             asns= parent.data[zOrig]["path"]
                             self.incCount(count,  zOrig, porigAS, zAS, asns)
+                            self.incTotalCount(count, zOrig, porigAS, zAS)
+                            self.incTotalCount(-count, zOrig, origAS, zAS)
 
                         asns = node.data[zOrig]["path"]
                         self.incCount(count,  zOrig, origAS, zAS, asns)
@@ -212,6 +253,10 @@ class pathCounter(threading.Thread):
                 path = sPath.split(" ")
 
                 self.announceQueue.put( (zTd, zDt, zS, zOrig, zAS, zPfx, path, zPro, zOr, z0, z1, z2, z3, z4, z5 ) )
+
+                if  zOrig not in self.peers:
+                    # no need to update the counts for non-full feed peers
+                    continue
 
                 origAS = path[-1]
 
@@ -234,7 +279,9 @@ class pathCounter(threading.Thread):
                             parent.data[zOrig]["count"] -= count
                             porigAS = parent.data[zOrig]["origAS"]
                             asns = parent.data[zOrig]["path"]
-                            self.incCount(count,  zOrig, porigAS, zAS, asns)
+                            self.incCount(-count,  zOrig, porigAS, zAS, asns)
+                            self.incTotalCount(-count, zOrig, pOrigAS, zAS)
+                            self.incTotalCount(count, zOrig, origAS, zAS)
 
                     else:
                         self.incTotalCount(1,  zOrig, porigAS, zAS)

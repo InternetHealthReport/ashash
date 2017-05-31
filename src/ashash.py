@@ -7,6 +7,8 @@ from collections import deque
 from datetime import datetime
 import numpy as np
 import Queue
+from multiprocessing import Pipe as mpPipe
+from multiprocessing import Process
 
 import pathCounter
 import asHegemony
@@ -21,7 +23,7 @@ parser.add_argument("-M", help="number of sketches per hash function", type=int,
 parser.add_argument("-d","--distThresh", help="simhash distance threshold", type=int, default=3)
 parser.add_argument("-r","--minVoteRatio", help="Minimum ratio of sketches to detect anomalies (should be between 0 and 1)", type=float, default=0.5)
 parser.add_argument("-H","--historyDuration", help="Time duration of the history for computing the reference (mult 15min)", type=int, default=4)
-parser.add_argument("-p", "--proc", help="number of processes", type=int)
+parser.add_argument("-p", "--proc", help="number of processes", type=int, default=4)
 parser.add_argument("-s", "--spatial", help="spatial resolution (0 for prefix, 1 for address)", type=int, default=1)
 # parser.add_argument("--filterCountry", help="Filter: country code to monitor", type=str, default=None)
 parser.add_argument("-w", "--window", help="Time window: time resolution in seconds (works only with  bgpstream)", type=int, default=900)
@@ -30,10 +32,14 @@ parser.add_argument("updates", help="UPDATES files", nargs="+")
 # parser.add_argument("output", help="output directory")
 args = parser.parse_args()
 
+FORMAT = '%(asctime)s %(processName)s %(message)s'
+logging.basicConfig(format=FORMAT, filename='ashash.log', level=logging.DEBUG, datefmt='%Y-%m-%d %H:%M:%S')
+logging.info("Started: %s" % sys.argv)
+logging.info("Arguments: %s" % args)
 
-## Parse arguments
-if args.proc is None:
-    args.proc = args.N
+# ## Parse arguments
+# if args.proc is None:
+    # args.proc = args.N
 
 # try:
     # os.makedirs(os.path.dirname(args.output))
@@ -41,40 +47,47 @@ if args.proc is None:
     # if exc.errno != errno.EEXIST:
         # raise
 
-# p=Pool(args.proc)
-FORMAT = '%(asctime)s %(message)s'
-logging.basicConfig(format=FORMAT, filename='ashash.log', level=logging.DEBUG, datefmt='%Y-%m-%d %H:%M:%S')
-
 announceQueue = Queue.Queue(5000)
 countQueue = Queue.Queue(10)
 hegemonyQueue = Queue.Queue(10)
 hegemonyQueuePM = Queue.Queue(10)
-hegemonyQueueGM = Queue.Queue(1000)
+
+nbGM = 5 
+pipeGM = []
+gm = []
 
 # Analysis Modules
+for i in range(nbGM):
+    recv, send = mpPipe(False)
+    pipeGM.append(send)
+    gm.append( Process(target=graphMonitor.graphMonitor, args=(recv, args.N, args.M, args.distThresh, args.minVoteRatio, args.proc), name="GM%s" % i ))
+# gm = graphMonitor.graphMonitor(hegemonyQueueGM, args.N, args.M, args.distThresh, args.minVoteRatio, args.proc)
 pc = pathCounter.pathCounter(args.ribs, args.updates, announceQueue, countQueue, spatialResolution=args.spatial, af=args.af, timeWindow=args.window)
 pm = pathMonitor.pathMonitor(hegemonyQueuePM, announceQueue)
-gm = graphMonitor.graphMonitor(hegemonyQueueGM, args.N, args.M, args.distThresh, args.minVoteRatio, args.proc)
 ash = asHegemony.asHegemony(countQueue, hegemonyQueue)
 
+for g in gm:
+    g.start()
 pm.start()
-gm.start()
 ash.start()
 pc.start()
 
 # Broadcast AS hegemony results to pathMonitor and graphMonitor
 while pm.isAlive() or not hegemonyQueue.empty():
     elem = hegemonyQueue.get()
-    if elem[1] == "total":
+    if elem[1] == "all":
         hegemonyQueuePM.put( elem )
-        hegemonyQueueGM.put( elem )
+        pipeGM[0].send( elem )
+    else:
+        pipeGM[int(elem[1])%nbGM].send( elem )
 
 pc.join()
 announceQueue.join()
 countQueue.join()
-hegemonyQueueGM.join()
 
 logging.info("Good bye!")
+
+
 # # initialisation for the figures and output
 # outFile = open(args.output+"/results_ip.txt","w")
 # refAsProb = defaultdict(lambda : deque(maxlen=args.historyDuration*len(root.data)))

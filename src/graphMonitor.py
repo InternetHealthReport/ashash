@@ -1,14 +1,12 @@
 import logging
 import numpy as np
-import hashlib
-import cPickle as pickle
 from multiprocessing import Pool
 import mmh3
 import requests
 import json
 import itertools
 from  more_itertools import unique_justseen
-import threading
+# import threading
 from collections import defaultdict
 import simhash
 
@@ -22,60 +20,74 @@ def sketchesSimhash(sketches):
     return hashes
 
 
+class graphMonitor():
+    def __init__(self, hegemonyPipe, N, M, distThresh=3, minVoteRatio=0.5, nbProc=4 ):
+        # threading.Thread.__init__(self)
 
-class graphMonitor(threading.Thread):
-    def __init__(self, hegemonyQueue, N, M, distThresh=3, minVotes=0.5, nbProc=12 ):
-        threading.Thread.__init__(self)
-
-        self.hegemonyQueue = hegemonyQueue
+        self.hegemonyPipe = hegemonyPipe
         self.N = N
         self.M = M
         self.distThresh = distThresh
-        self.minVotes = minVotes
+        self.minVotes = minVoteRatio*N
         self.nbProc = nbProc
         self.seeds = [2**i for i in range(1,self.N+1)]
 
         self.ts = None
         self.scope = None
         self.hegemony = None
-        self.previousResults = None
-        self.daemon = True
+        self.previousResults = dict()
+        # self.hashCache = defaultdict(dict)
+        self.pool = Pool(nbProc)
+
+        logging.debug("(graphMonitor) New Graph Monitor")
+        self.run()
+
+
+    def hash(self, asn, seed):
+        if self.scope == "all":
+            return mmh3.hash128(asn,seed=seed)%self.M
+        else:
+            return mmh3.hash128(asn,seed=seed)%(self.M/10)
+        # try:
+            # return self.hashCache[asn][seed]
+        # except KeyError:
+            # h = mmh3.hash128(asn,seed=seed)%self.M
+            # self.hashCache[asn][seed] = h
+            # return h 
 
 
     def run(self):
-        # self.pool = Pool(self.nbProc)
         while True:
-            logging.debug("(graphMonitor) Waiting for data")
-            self.ts, self.scope, self.hegemony = self.hegemonyQueue.get() 
-            logging.debug("(graphMonitor) before sketching")
+            # logging.debug("(graphMonitor) Waiting for data")
+            self.ts, self.scope, self.hegemony = self.hegemonyPipe.recv() 
+            # logging.debug("(graphMonitor) before sketching")
             res = self.sketching()
 
-            logging.debug("(graphMonitor) Sketching done")
+            # logging.debug("(graphMonitor) Sketching done")
 
-            if not self.previousResults is None:
-                print self.compareSimhash(res)
+            if self.scope in self.previousResults:
+                ano = "%s: %s" % (self.ts, self.compareSimhash(res))
 
-            self.previousResults = res
+            self.previousResults[self.scope] = res
             
-            logging.debug("(graphMonitor) Comparison done")
-            self.hegemonyQueue.task_done()
+            # logging.debug("(graphMonitor) Comparison done")
 
 
     def sketching(self):
         sketches = defaultdict(lambda : defaultdict(dict)) 
         for seed in self.seeds:
             for asn, prob in self.hegemony.iteritems():
-                sketches[seed][mmh3.hash128(asn,seed=seed)%self.M][asn] = prob
+                sketches[seed][self.hash(asn,seed)][asn] = prob
 
         # compute the simhash for each hash function
-        # hashes= self.pool.map(sketchesSimhash, sketches.itervalues())
-        hashes= map(sketchesSimhash, sketches.itervalues())
+        hashes= self.pool.map(sketchesSimhash, sketches.itervalues())
+        # hashes= map(sketchesSimhash, sketches.itervalues())
 
         return dict(zip(sketches.keys(), hashes)), sketches
 
 
     def compareSimhash(self, results):
-        prevHash, prevSketches = self.previousResults
+        prevHash, prevSketches = self.previousResults[self.scope]
         currHash, currSketches = results
         cumDistance = 0
         nbAnomalousSketches = 0
