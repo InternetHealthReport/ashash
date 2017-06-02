@@ -1,5 +1,4 @@
 import logging
-import numpy as np
 from multiprocessing import Pool
 import mmh3
 import requests

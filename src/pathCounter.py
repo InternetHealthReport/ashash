@@ -2,7 +2,6 @@ from subprocess import Popen, PIPE
 import glob
 import radix
 from collections import defaultdict
-import numpy as np
 
 import threading
 import copy
@@ -28,7 +27,6 @@ class pathCounter(threading.Thread):
         self.timeWindow = timeWindow
 
         self.rtree = radix.Radix()
-        root = self.rtree.add("0.0.0.0/0")
 
         self.ts = None
         self.peers = None
@@ -79,6 +77,8 @@ class pathCounter(threading.Thread):
 
         return res
 
+    def saveGraph(self):
+        
 
     def cleanUnusedCounts(self):
 
@@ -129,8 +129,6 @@ class pathCounter(threading.Thread):
 
     def readrib(self):
 
-        root = self.rtree.search_exact("0.0.0.0/0")
-
         if self.ribfile.startswith("@bgpstream:"):
             if self.af == 6:
                 afFilter = "::0/0"
@@ -141,7 +139,7 @@ class pathCounter(threading.Thread):
             p1 = Popen(["bgpdump", "-m", "-v", "-t", "change", self.ribfile], stdout=PIPE, bufsize=-1)
 
         for line in p1.stdout: 
-            zTd, zDt, zS, zOrig, zAS, zPfx, sPath, zPro, zOr, z0, z1, z2, z3, z4, z5 = line.split('|',16)
+            zTd, zDt, zS, zOrig, zAS, zPfx, sPath, zOther = line.split('|',8)
 
             if self.af == 4 and ":" in zPfx:
                 continue
@@ -163,11 +161,10 @@ class pathCounter(threading.Thread):
             node = self.rtree.add(zPfx)
             node.data[zOrig] = {"path": set(path), "count": 0, "origAS":origAS}
 
-            count = 1
             if self.spatialResolution:
                 count = self.nbIPs(node.prefixlen)
 
-                countBelow = np.sum([n.data[zOrig]["count"] for n in self.rtree.search_covered(zPfx) if zOrig in n.data])
+                countBelow = sum([n.data[zOrig]["count"] for n in self.rtree.search_covered(zPfx) if zOrig in n.data])
                 count -= countBelow
                 node.data[zOrig]["count"] = count
 
@@ -181,12 +178,11 @@ class pathCounter(threading.Thread):
                     asns = parent.data[zOrig]["path"]
                     self.incCount(-count, zOrig, pOrigAS, zAS, asns)
                     self.incTotalCount(-count, zOrig, pOrigAS, zAS)
-                    self.incTotalCount(count, zOrig, origAS, zAS)
-            
-            else: 
-                self.incTotalCount(count, zOrig, origAS, zAS)
+            else:
+                count = 1
 
             asns = node.data[zOrig]["path"]
+            self.incTotalCount(count, zOrig, origAS, zAS)
             self.incCount(count, zOrig, origAS, zAS, asns)
         
 
@@ -280,7 +276,7 @@ class pathCounter(threading.Thread):
                     if self.spatialResolution:
                         # Compute the exact number of IPs
                         count = self.nbIPs(node.prefixlen)
-                        countBelow = np.sum([n.data[zOrig]["count"] for n in self.rtree.search_covered(zPfx) if zOrig in n.data])
+                        countBelow = sum([n.data[zOrig]["count"] for n in self.rtree.search_covered(zPfx) if zOrig in n.data])
                         count -= countBelow
 
                         parent = self.findParent(node, zOrig)

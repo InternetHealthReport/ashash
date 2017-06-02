@@ -2,7 +2,7 @@ import threading
 import logging
 from scipy import stats
 from collections import defaultdict
-import numpy as np
+# import numpy as np
 
 class asHegemony(threading.Thread):
     def __init__(self, countQueue, hegemonyQueue, alpha=0.1):

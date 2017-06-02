@@ -5,9 +5,9 @@ import logging
 import errno
 from collections import deque
 from datetime import datetime
-import numpy as np
 import Queue
 from multiprocessing import Pipe as mpPipe
+from multiprocessing import Queue as mpQueue
 from multiprocessing import Process
 
 import pathCounter
@@ -51,6 +51,7 @@ announceQueue = Queue.Queue(5000)
 countQueue = Queue.Queue(10)
 hegemonyQueue = Queue.Queue(10)
 hegemonyQueuePM = Queue.Queue(10)
+saverQueue = mpQueue(100)
 
 nbGM = 5 
 pipeGM = []
@@ -61,7 +62,7 @@ for i in range(nbGM):
     recv, send = mpPipe(False)
     pipeGM.append(send)
     gm.append( Process(target=graphMonitor.graphMonitor, args=(recv, args.N, args.M, args.distThresh, args.minVoteRatio, args.proc), name="GM%s" % i ))
-# gm = graphMonitor.graphMonitor(hegemonyQueueGM, args.N, args.M, args.distThresh, args.minVoteRatio, args.proc)
+
 pc = pathCounter.pathCounter(args.ribs, args.updates, announceQueue, countQueue, spatialResolution=args.spatial, af=args.af, timeWindow=args.window)
 pm = pathMonitor.pathMonitor(hegemonyQueuePM, announceQueue)
 ash = asHegemony.asHegemony(countQueue, hegemonyQueue)
@@ -86,72 +87,4 @@ announceQueue.join()
 countQueue.join()
 
 logging.info("Good bye!")
-
-
-# # initialisation for the figures and output
-# outFile = open(args.output+"/results_ip.txt","w")
-# refAsProb = defaultdict(lambda : deque(maxlen=args.historyDuration*len(root.data)))
-
-# # Update the reference
-# for asn, prob in currAsProb.iteritems():
-    # refAsProb[asn].extend(prob)
-
-# # read update files
-# for updates in args.updates:
-            
-    # bgpstream = False
-    # if updates.startswith("@bgpstream:"):
-        # bgpstream = True
-        # w = updates.rpartition(":")[2].split(",")
-        # ts,te = int(w[0]),int(w[1]) 
-        
-        # update_files = ["@bgpstream:%s,%s" % (t, t+args.window) for t in range(ts, te, args.window)]
-
-    # else:
-        # update_files = glob.glob(updates)
-        # update_files.sort()
-
-    # if len(update_files)==0:
-        # sys.exit()
-
-    # for fi in update_files:
-        # if bgpstream:
-            # date = datetime.utcfromtimestamp(int(fi.rpartition(":")[2].partition(",")[0]))
-            # date = ".%s%02d%02d.%02d%02d" % (date.year, date.month, date.day, date.hour, date.minute)
-            # date = date.split(".")
-        # else:
-            # filename = fi.rpartition("/")[2]
-            # date = filename.split(".")
-
-        # sys.stdout.write("\r %s:%s " % (date[1], date[2]))
-        # rtree, updateStats = readupdates(fi, rtree, args.spatial, args.af, filterAS, filterPrefix, args.plot, g)
-
-        # outFile.write("%s:%s | %s | %s | %s | %s | %s | " % (date[1], date[2], updateStats["announce"], \
-                # updateStats["withdraw"], np.median(updateStats["prefixLen"]), \
-                # np.median(updateStats["pathLen"]), len(updateStats["originAS"]) ) )
-        # (currHash, currSketches), currAsProb = computeSimhash(rtree, p, args.N, args.M, args.spatial, outFile, filterAS, filterPrefix)
-
-        # if currHash is None:
-            # anomalousAsn = []
-            # nbAnoSketch =  np.nan
-            # distance = np.nan
-        # else:
-            # aggProb = aggregateCentrality(refAsProb)
-            # refHash, refSketches = sketching(aggProb, p, args.N, args.M)
-            # anomalousAsn, nbAnoSketch, distance = compareSimhash(refHash, currHash, refSketches, currSketches, int(args.N*args.minVoteRatio), args.distThresh)
-
-
-        # sys.stdout.write("%s anomalous sketches (dist=%s), " % (nbAnoSketch, distance))
-        # if len(anomalousAsn):
-            # sys.stdout.write("%s" % (anomalousAsn))
-        # sys.stdout.flush()
-
-        # outFile.write("%s | %s | %s \n" % (nbAnoSketch, distance, anomalousAsn) )
-        # outFile.flush()
-    
-        # if not currHash is None:
-            # # Update the reference
-            # for asn, prob in currAsProb.iteritems():
-                # refAsProb[asn].extend(prob)
-
 
