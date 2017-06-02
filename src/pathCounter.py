@@ -32,6 +32,7 @@ class pathCounter(threading.Thread):
 
         self.ts = None
         self.peers = None
+        self.peersAS = defaultdict(set) 
 
         self.counter = {
                 "all": pathCountDict(),
@@ -43,10 +44,9 @@ class pathCounter(threading.Thread):
         logging.info("Reading RIB files...")
         self.readrib()
         self.peers = self.findFullFeeds()
-        #clean counts from non-full feed peers ?
+        self.peersAS = {p:self.peersAS[p] for p in self.peers} 
+        logging.debug("(pathCounter) %s " % self.peersAS)
         self.cleanUnusedCounts()
-        #TODO get full feed peers ASN, and filter with bgpreader
-        #TODO select only one peer per ASN?
         logging.info("Reading UPDATE files...")
         for updatefile in self.updatefiles:
             self.readupdates(updatefile)
@@ -78,6 +78,7 @@ class pathCounter(threading.Thread):
         logging.debug("(pathCounter) %s full feed peers" % len(res))
 
         return res
+
 
     def cleanUnusedCounts(self):
 
@@ -131,7 +132,11 @@ class pathCounter(threading.Thread):
         root = self.rtree.search_exact("0.0.0.0/0")
 
         if self.ribfile.startswith("@bgpstream:"):
-            p1 = Popen(["bgpreader","-m", "-w",self.ribfile.rpartition(":")[2], "-p", "routeviews", "-c","route-views.wide", "-t","ribs"], stdout=PIPE)
+            if self.af == 6:
+                afFilter = "::0/0"
+            else:
+                afFilter =  "0.0.0.0/0"
+            p1 = Popen(["bgpreader","-m", "-w",self.ribfile.rpartition(":")[2],"-k", afFilter, "-c","route-views.linx", "-c", "route-views2", "-c", "rrc00", "-c", "rrc10", "-t","ribs"], stdout=PIPE)
         else:
             p1 = Popen(["bgpdump", "-m", "-v", "-t", "change", self.ribfile], stdout=PIPE, bufsize=-1)
 
@@ -149,6 +154,8 @@ class pathCounter(threading.Thread):
             # set first time bin!
             if self.ts is None:
                 self.ts = int(zDt)
+
+            self.peersAS[zOrig].add(zAS)
 
             path = sPath.split(" ")
             origAS = path[-1]
@@ -186,7 +193,12 @@ class pathCounter(threading.Thread):
     def readupdates(self, updatefile):
 
         if updatefile.startswith("@bgpstream:"):
-            p1 = Popen(["bgpreader", "-m", "-w", updatefile.rpartition(":")[2], "-p", "routeviews", "-c", "route-views.wide", "-t", "updates"], stdout=PIPE)
+            if self.af == 6:
+                afFilter = "::0/0"
+            else:
+                afFilter =  "0.0.0.0/0"
+            p1 = Popen(["bgpreader", "-m", "-w", updatefile.rpartition(":")[2], "-k", afFilter,  "-c", "route-views.linx", "-c", "route-views2", "-c", "rrc00", "-c", "rrc10", "-t", "updates"], stdout=PIPE)
+            # p1 = Popen(["bgpreader", "-m", "-w", updatefile.rpartition(":")[2], "-p", "routeviews", "-p", "ris", "-c", "route-views.linx", "-c", "route-views.route-views2", "-c", "ris.rrc00", "-c", "ris.rrc10", "-t", "updates"], stdout=PIPE)
         else:
             p1 = Popen(["bgpdump", "-m", "-v", updatefile],  stdout=PIPE, bufsize=-1)
         
@@ -273,18 +285,18 @@ class pathCounter(threading.Thread):
 
                         parent = self.findParent(node, zOrig)
                         if parent is None:
-                            self.incTotalCount(count,  zOrig, porigAS, zAS)
+                            self.incTotalCount(count,  zOrig, origAS, zAS)
                         else:
                         # Update above nodes 
                             parent.data[zOrig]["count"] -= count
                             porigAS = parent.data[zOrig]["origAS"]
                             asns = parent.data[zOrig]["path"]
                             self.incCount(-count,  zOrig, porigAS, zAS, asns)
-                            self.incTotalCount(-count, zOrig, pOrigAS, zAS)
+                            self.incTotalCount(-count, zOrig, porigAS, zAS)
                             self.incTotalCount(count, zOrig, origAS, zAS)
 
                     else:
-                        self.incTotalCount(1,  zOrig, porigAS, zAS)
+                        self.incTotalCount(1,  zOrig, origAS, zAS)
                         count = 1
 
                     # Update the ASes counts
