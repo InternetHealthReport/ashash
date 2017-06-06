@@ -9,6 +9,7 @@
 - scipy
 - matplotlib
 - networkx
+- more_itertools
 
 #### BGP tools:
 - bgpdump

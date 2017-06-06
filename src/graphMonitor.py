@@ -1,7 +1,7 @@
 import logging
 from multiprocessing import Pool
 import mmh3
-import requests
+# import requests
 import json
 import itertools
 from  more_itertools import unique_justseen
