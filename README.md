@@ -10,6 +10,7 @@
 - matplotlib
 - networkx
 - more_itertools
+- apsw
 
 #### BGP tools:
 - bgpdump
