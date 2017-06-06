@@ -5,24 +5,28 @@ from collections import defaultdict
 # import numpy as np
 
 class asHegemony(threading.Thread):
-    def __init__(self, countQueue, hegemonyQueue, alpha=0.1):
+    def __init__(self, countQueue, hegemonyQueue, alpha=0.1, saverQueue=None):
         threading.Thread.__init__(self)
         self.countQueue = countQueue
         self.hegemonyQueue = hegemonyQueue
         self.alpha = alpha
         self.daemon = True
+        self.saverQueue = saverQueue
 
 
     def run(self):
         while True:
             logging.debug("(AS hegemony) waiting for data")
             ts, peers, counts = self.countQueue.get()
+            self.saverQueue.put("BEGIN TRANSACTION;")
             origAShege = []
 
             # AS hegemony for the global graph
             logging.debug("(AS hegemony) making global graph hegemony")
             asHege = self.asHegemony(peers, counts["all"])
             self.hegemonyQueue.put( (ts, "all", asHege) )
+            if not self.saverQueue is None:
+                self.saverQueue.put( ("hegemony", (ts, 0, asHege)) )
 
             # AS hegemony for graph bound to originating AS
             logging.debug("(AS hegemony) making local graphs hegemony")
@@ -30,21 +34,19 @@ class asHegemony(threading.Thread):
                 if asn.startswith("{"):
                     #TODO handle set origins
                     continue
-                hege = self.asHegemony(peers, count)
-                # origAShege.append((ts, asn, hege))
-                self.hegemonyQueue.put((ts, asn, hege))
+                asHege = self.asHegemony(peers, count)
+                # origAShege.append((ts, asn, asHege))
+                self.hegemonyQueue.put((ts, asn, asHege))
+                if not self.saverQueue is None:
+                    self.saverQueue.put( ("hegemony", (ts, asn, asHege)) )
 
+            self.saverQueue.put("COMMIT;")
             #let the pathCounter run again
             self.countQueue.task_done()
 
-            # #push results for graph analysis
-            # for res in origAShege:
-                # self.hegemonyQueue.put(res)
-
-
 
     def asHegemony(self, peers, counter):
-        asHege = dict()
+        asHege = defaultdict(float)
         asList = set(counter["asn"].keys())
         peersTotalCount = {p:float(counter["total"][p]) for p in peers if counter["total"][p]>0}
 

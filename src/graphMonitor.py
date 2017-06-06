@@ -20,7 +20,7 @@ def sketchesSimhash(sketches):
 
 
 class graphMonitor():
-    def __init__(self, hegemonyPipe, N, M, distThresh=3, minVoteRatio=0.5, nbProc=4 ):
+    def __init__(self, hegemonyPipe, N, M, distThresh=3, minVoteRatio=0.5, saverQueue=None, nbProc=4 ):
         # threading.Thread.__init__(self)
 
         self.hegemonyPipe = hegemonyPipe
@@ -37,8 +37,9 @@ class graphMonitor():
         self.previousResults = dict()
         # self.hashCache = defaultdict(dict)
         self.pool = Pool(nbProc)
+        self.saverQueue = saverQueue
 
-        logging.debug("(graphMonitor) New Graph Monitor")
+        logging.debug(" New Graph Monitor")
         self.run()
 
 
@@ -105,9 +106,13 @@ class graphMonitor():
                             prevProb = prevSketches[seed][m][asn]
                         diff[asn] = currProb-prevProb
 
-        anomalousAsn = [(asn, count, diff[asn]) for asn, count in votes.iteritems() if count >= self.minVotes and diff[asn]]
+        anomalies = [(asn, count, diff[asn]) for asn, count in votes.iteritems() if count >= self.minVotes and diff[asn]]
 
-        return anomalousAsn, nbAnomalousSketches, cumDistance
+        if anomalies:
+            for ano in anomalies:
+                self.saverQueue.put( ("graphchange", [self.ts, self.scope, ano[0], ano[1], ano[2]]) )
+
+        # return anomalousAsn, nbAnomalousSketches, cumDistance
 
 
     # def hashfunc(self, x):

@@ -78,6 +78,7 @@ class pathCounter(threading.Thread):
         return res
 
     def saveGraph(self):
+        pass
         
 
     def cleanUnusedCounts(self):
@@ -139,7 +140,7 @@ class pathCounter(threading.Thread):
             p1 = Popen(["bgpdump", "-m", "-v", "-t", "change", self.ribfile], stdout=PIPE, bufsize=-1)
 
         for line in p1.stdout: 
-            zTd, zDt, zS, zOrig, zAS, zPfx, sPath, zOther = line.split('|',8)
+            zTd, zDt, zS, zOrig, zAS, zPfx, sPath, zOther = line.split('|',7)
 
             if self.af == 4 and ":" in zPfx:
                 continue
@@ -148,10 +149,6 @@ class pathCounter(threading.Thread):
             
             if zPfx == "0.0.0.0/0":
                 continue
-
-            # set first time bin!
-            if self.ts is None:
-                self.ts = int(zDt)
 
             self.peersAS[zOrig].add(zAS)
 
@@ -194,7 +191,7 @@ class pathCounter(threading.Thread):
             else:
                 afFilter =  "0.0.0.0/0"
             p1 = Popen(["bgpreader", "-m", "-w", updatefile.rpartition(":")[2], "-k", afFilter,  "-c", "route-views.linx", "-c", "route-views2", "-c", "rrc00", "-c", "rrc10", "-t", "updates"], stdout=PIPE)
-            # p1 = Popen(["bgpreader", "-m", "-w", updatefile.rpartition(":")[2], "-p", "routeviews", "-p", "ris", "-c", "route-views.linx", "-c", "route-views.route-views2", "-c", "ris.rrc00", "-c", "ris.rrc10", "-t", "updates"], stdout=PIPE)
+            # p1 = Popen(["bgpreader", "-m", "-w", updatefile.rpartition(":")[2], "-c", "route-views.linx", "-t", "updates"], stdout=PIPE)
         else:
             p1 = Popen(["bgpdump", "-m", "-v", updatefile],  stdout=PIPE, bufsize=-1)
         
@@ -202,7 +199,6 @@ class pathCounter(threading.Thread):
             res = line[:-1].split('|',15)
             zOrig = res[3]
 
-            
             if res[5] == "0.0.0.0/0":
                 continue
             
@@ -212,10 +208,15 @@ class pathCounter(threading.Thread):
                 continue
             
             msgTs = int(res[1])
-            if self.ts + self.timeWindow < msgTs:
+            # set first time bin!
+            if self.ts is None:
+                self.ts = 0
+                self.slideTimeWindow(msgTs)
+            
+            elif self.ts + self.timeWindow < msgTs:
                 self.slideTimeWindow(msgTs)
 
-            if self.ts > msgTs:
+            elif self.ts > msgTs:
                 #Old update, ignore this to update the graph
                 logging.warn("Ignoring old update (peer IP: %s, timestamp: %s, current time bin: %s" % (res[3], res[1], self.ts))
                 continue
@@ -257,6 +258,7 @@ class pathCounter(threading.Thread):
                     node.data[zOrig]["origAS"] = "" 
             
             else:
+                # Announce: update counters
                 zTd, zDt, zS, zOrig, zAS, zPfx, sPath, zPro, zOr, z0, z1, z2, z3, z4, z5 = res
                 path = sPath.split(" ")
 
@@ -318,10 +320,5 @@ class pathCounter(threading.Thread):
                     node.data[zOrig]["origAS"] = origAS
                     asns = node.data[zOrig]["path"]
                     self.incCount(count,  zOrig, origAS, zAS, asns)
-
-
-        # self.cursor.execute("commit;")
-
-
 
 

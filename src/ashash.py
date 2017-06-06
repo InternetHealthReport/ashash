@@ -14,7 +14,7 @@ import pathCounter
 import asHegemony
 import pathMonitor
 import graphMonitor
-
+import saverSQLite
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-a","--af", help="address family (4, 6)", type=int, default=4)
@@ -22,10 +22,7 @@ parser.add_argument("-N", help="number of hash functions for sketching", type=in
 parser.add_argument("-M", help="number of sketches per hash function", type=int, default=128)
 parser.add_argument("-d","--distThresh", help="simhash distance threshold", type=int, default=3)
 parser.add_argument("-r","--minVoteRatio", help="Minimum ratio of sketches to detect anomalies (should be between 0 and 1)", type=float, default=0.5)
-parser.add_argument("-H","--historyDuration", help="Time duration of the history for computing the reference (mult 15min)", type=int, default=4)
-parser.add_argument("-p", "--proc", help="number of processes", type=int, default=4)
 parser.add_argument("-s", "--spatial", help="spatial resolution (0 for prefix, 1 for address)", type=int, default=1)
-# parser.add_argument("--filterCountry", help="Filter: country code to monitor", type=str, default=None)
 parser.add_argument("-w", "--window", help="Time window: time resolution in seconds (works only with  bgpstream)", type=int, default=900)
 parser.add_argument("ribs", help="RIBS files")
 parser.add_argument("updates", help="UPDATES files", nargs="+")
@@ -38,8 +35,6 @@ logging.info("Started: %s" % sys.argv)
 logging.info("Arguments: %s" % args)
 
 # ## Parse arguments
-# if args.proc is None:
-    # args.proc = args.N
 
 # try:
     # os.makedirs(os.path.dirname(args.output))
@@ -51,40 +46,45 @@ announceQueue = Queue.Queue(5000)
 countQueue = Queue.Queue(10)
 hegemonyQueue = Queue.Queue(10)
 hegemonyQueuePM = Queue.Queue(10)
-saverQueue = mpQueue(100)
+saverQueue = mpQueue(500)
 
 nbGM = 5 
 pipeGM = []
 gm = []
+sqldb = "ashash_results.sql"
 
 # Analysis Modules
 for i in range(nbGM):
     recv, send = mpPipe(False)
     pipeGM.append(send)
-    gm.append( Process(target=graphMonitor.graphMonitor, args=(recv, args.N, args.M, args.distThresh, args.minVoteRatio, args.proc), name="GM%s" % i ))
+    gm.append( Process(target=graphMonitor.graphMonitor, args=(recv, args.N, args.M, args.distThresh, args.minVoteRatio, saverQueue), name="GM%s" % i ))
+pc = pathCounter.pathCounter(args.ribs, args.updates, announceQueue, countQueue, spatialResolution=args.spatial, af=args.af, timeWindow=args.window )
+pm = pathMonitor.pathMonitor(hegemonyQueuePM, announceQueue, saverQueue=saverQueue)
+ash = asHegemony.asHegemony(countQueue, hegemonyQueue, saverQueue=saverQueue)
 
-pc = pathCounter.pathCounter(args.ribs, args.updates, announceQueue, countQueue, spatialResolution=args.spatial, af=args.af, timeWindow=args.window)
-pm = pathMonitor.pathMonitor(hegemonyQueuePM, announceQueue)
-ash = asHegemony.asHegemony(countQueue, hegemonyQueue)
+ss = Process(target=saverSQLite.saverSQLite, args=(sqldb, saverQueue), name="saverSQLite")
+ss.start()
+saverQueue.put(("experiment", [datetime.now(), str(sys.argv), str(args)]))
 
-for g in gm:
-    g.start()
+for g in gm: 
+    g.start();
 pm.start()
 ash.start()
 pc.start()
 
 # Broadcast AS hegemony results to pathMonitor and graphMonitor
-while pm.isAlive() or not hegemonyQueue.empty():
+while pc.isAlive() or not hegemonyQueue.empty():
     elem = hegemonyQueue.get()
     if elem[1] == "all":
-        hegemonyQueuePM.put( elem )
         pipeGM[0].send( elem )
     else:
         pipeGM[int(elem[1])%nbGM].send( elem )
+        # hegemonyQueuePM.put( elem )
 
-pc.join()
+# pm.join()
 announceQueue.join()
 countQueue.join()
+saverQueue.join()
 
 logging.info("Good bye!")
 
