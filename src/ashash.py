@@ -24,24 +24,23 @@ parser.add_argument("-d","--distThresh", help="simhash distance threshold", type
 parser.add_argument("-r","--minVoteRatio", help="Minimum ratio of sketches to detect anomalies (should be between 0 and 1)", type=float, default=0.5)
 parser.add_argument("-s", "--spatial", help="spatial resolution (0 for prefix, 1 for address)", type=int, default=1)
 parser.add_argument("-w", "--window", help="Time window: time resolution in seconds (works only with  bgpstream)", type=int, default=900)
+parser.add_argument("-o", "--output", help="output directory", default="results/")
 parser.add_argument("ribs", help="RIBS files")
 parser.add_argument("updates", help="UPDATES files", nargs="+")
-# parser.add_argument("output", help="output directory")
 args = parser.parse_args()
 
+try:
+    os.makedirs(os.path.dirname(args.output))
+except OSError as exc: # Guard against race condition
+    if exc.errno != errno.EEXIST:
+        raise
+
 FORMAT = '%(asctime)s %(processName)s %(message)s'
-logging.basicConfig(format=FORMAT, filename='ashash.log', level=logging.DEBUG, datefmt='%Y-%m-%d %H:%M:%S')
+logging.basicConfig(format=FORMAT, filename=args.output+'ashash.log', level=logging.DEBUG, datefmt='%Y-%m-%d %H:%M:%S')
 logging.info("Started: %s" % sys.argv)
 logging.info("Arguments: %s" % args)
 
-# ## Parse arguments
-
-# try:
-    # os.makedirs(os.path.dirname(args.output))
-# except OSError as exc: # Guard against race condition
-    # if exc.errno != errno.EEXIST:
-        # raise
-
+# Initialisation
 announceQueue = Queue.Queue(5000)
 countQueue = Queue.Queue(10)
 hegemonyQueue = Queue.Queue(10)
@@ -51,7 +50,7 @@ saverQueue = mpQueue(500)
 nbGM = 5 
 pipeGM = []
 gm = []
-sqldb = "ashash_results.sql"
+sqldb = args.output+"ashash_results.sql"
 
 # Analysis Modules
 for i in range(nbGM):
@@ -73,13 +72,13 @@ ash.start()
 pc.start()
 
 # Broadcast AS hegemony results to pathMonitor and graphMonitor
-while pc.isAlive() or not hegemonyQueue.empty():
+while pc.isAlive():
     elem = hegemonyQueue.get()
     if elem[1] == "all":
         pipeGM[0].send( elem )
     else:
         pipeGM[int(elem[1])%nbGM].send( elem )
-        # hegemonyQueuePM.put( elem )
+        hegemonyQueuePM.put( elem )
 
 # pm.join()
 announceQueue.join()

@@ -19,12 +19,13 @@ class pathMonitor(threading.Thread):
         self.daemon = True
         self.saverQueue = saverQueue
 
+        logging.debug("(pathMonitor) New Path Monitor")
+
 
     def run(self):
         while True:
             try:
                 _, scope, hege = self.hegemonyQueue.get_nowait() 
-                logging.debug("PM got new hegemony results")
                 self.hegemony[scope] = hege 
             except Queue.Empty:
                 pass

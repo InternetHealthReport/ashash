@@ -107,14 +107,13 @@ class pathCounter(threading.Thread):
 
 
     def slideTimeWindow(self,ts):
-        logging.debug("(pathCounter) sliding window...")
+        logging.debug("(pathCounter) sliding window... (ts=%s)" % self.ts)
 
-        # self.countQueue.put( (self.ts, peers, copy.deepcopy(self.counter)) )
         self.countQueue.put( (self.ts, self.peers, self.counter) )
         self.countQueue.join()
         self.ts = ts
         
-        logging.debug("(pathCounter) window slided")
+        logging.debug("(pathCounter) window slided (ts=%s)" % self.ts)
 
 
     def incTotalCount(self, count, peerip, origAS, zAS):
@@ -135,7 +134,8 @@ class pathCounter(threading.Thread):
                 afFilter = "::0/0"
             else:
                 afFilter =  "0.0.0.0/0"
-            p1 = Popen(["bgpreader","-m", "-w",self.ribfile.rpartition(":")[2],"-k", afFilter, "-c","route-views.linx", "-c", "route-views2", "-c", "rrc00", "-c", "rrc10", "-t","ribs"], stdout=PIPE)
+
+            p1 = Popen(["bgpreader","-m", "-w", self.ribfile.rpartition(":")[2],"-k", afFilter, "-c","route-views.linx", "-c", "route-views2", "-c", "rrc00", "-c", "rrc10", "-t","ribs"], stdout=PIPE)
         else:
             p1 = Popen(["bgpdump", "-m", "-v", "-t", "change", self.ribfile], stdout=PIPE, bufsize=-1)
 
@@ -154,6 +154,9 @@ class pathCounter(threading.Thread):
 
             path = sPath.split(" ")
             origAS = path[-1]
+            if len(path) < 2:
+                # Ignore paths with only one AS
+                continue
 
             node = self.rtree.add(zPfx)
             node.data[zOrig] = {"path": set(path), "count": 0, "origAS":origAS}
@@ -190,6 +193,7 @@ class pathCounter(threading.Thread):
                 afFilter = "::0/0"
             else:
                 afFilter =  "0.0.0.0/0"
+
             p1 = Popen(["bgpreader", "-m", "-w", updatefile.rpartition(":")[2], "-k", afFilter,  "-c", "route-views.linx", "-c", "route-views2", "-c", "rrc00", "-c", "rrc10", "-t", "updates"], stdout=PIPE)
             # p1 = Popen(["bgpreader", "-m", "-w", updatefile.rpartition(":")[2], "-c", "route-views.linx", "-t", "updates"], stdout=PIPE)
         else:
@@ -218,7 +222,7 @@ class pathCounter(threading.Thread):
 
             elif self.ts > msgTs:
                 #Old update, ignore this to update the graph
-                logging.warn("Ignoring old update (peer IP: %s, timestamp: %s, current time bin: %s" % (res[3], res[1], self.ts))
+                logging.warn("Ignoring old update (peer IP: %s, timestamp: %s, current time bin: %s): %s" % (res[3], res[1], self.ts, line))
                 continue
 
             node = self.rtree.search_exact(res[5])
@@ -261,6 +265,11 @@ class pathCounter(threading.Thread):
                 # Announce: update counters
                 zTd, zDt, zS, zOrig, zAS, zPfx, sPath, zPro, zOr, z0, z1, z2, z3, z4, z5 = res
                 path = sPath.split(" ")
+
+                if len(path) < 2:
+                    # Ignoring paths with only one AS
+                    continue
+
 
                 self.announceQueue.put( (zTd, zDt, zS, zOrig, zAS, zPfx, path, zPro, zOr, z0, z1, z2, z3, z4, z5 ) )
 
