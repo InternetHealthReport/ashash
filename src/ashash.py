@@ -54,9 +54,12 @@ sqldb = args.output+"ashash_results.sql"
 
 # Analysis Modules
 for i in range(nbGM):
-    recv, send = mpPipe(False)
-    pipeGM.append(send)
-    gm.append( Process(target=graphMonitor.graphMonitor, args=(recv, args.N, args.M, args.distThresh, args.minVoteRatio, saverQueue), name="GM%s" % i ))
+    # recv, send = 
+    pipeGM.append(mpPipe(False))
+
+for i in range(nbGM):
+    gm.append( Process(target=graphMonitor.graphMonitor, args=(pipeGM[i][0], args.N, args.M, args.distThresh, args.minVoteRatio, saverQueue), name="GM%s" % i ))
+
 pc = pathCounter.pathCounter(args.ribs, args.updates, announceQueue, countQueue, spatialResolution=args.spatial, af=args.af, timeWindow=args.window )
 pm = pathMonitor.pathMonitor(hegemonyQueuePM, announceQueue, saverQueue=saverQueue)
 ash = asHegemony.asHegemony(countQueue, hegemonyQueue, saverQueue=saverQueue)
@@ -76,9 +79,9 @@ while pc.isAlive():
     elem = hegemonyQueue.get()
     # logging.debug("(main) dispatching hegemony %s" % elem[1])
     if elem[1] == "all":
-        pipeGM[0].send( elem )
+        pipeGM[0][1].send( elem )
     else:
-        pipeGM[int(elem[1])%nbGM].send( elem )
+        pipeGM[int(elem[1])%nbGM][1].send( elem )
         hegemonyQueuePM.put( elem )
 
 # pm.join()
