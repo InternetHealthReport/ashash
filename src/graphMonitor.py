@@ -5,7 +5,6 @@ import mmh3
 import json
 import itertools
 from  more_itertools import unique_justseen
-# import threading
 from collections import defaultdict
 import simhash
 
@@ -36,7 +35,7 @@ class graphMonitor():
         self.hegemony = None
         self.previousResults = dict()
         # self.hashCache = defaultdict(dict)
-        self.pool = Pool(nbProc)
+        self.workers = Pool(nbProc)
         self.saverQueue = saverQueue
 
         logging.debug(" New Graph Monitor")
@@ -58,19 +57,19 @@ class graphMonitor():
 
     def run(self):
         while True:
-            # logging.debug("(graphMonitor) Waiting for data")
+            # logging.debug("Waiting for data")
             self.ts, self.scope, self.hegemony = self.hegemonyPipe.recv() 
-            # logging.debug("(graphMonitor) before sketching")
+            # logging.debug("Before sketching")
             res = self.sketching()
 
-            # logging.debug("(graphMonitor) Sketching done")
+            # logging.debug("Sketching done")
 
             if self.scope in self.previousResults:
                 ano = "%s: %s" % (self.ts, self.compareSimhash(res))
 
             self.previousResults[self.scope] = res
             
-            # logging.debug("(graphMonitor) Comparison done")
+            # logging.debug("Comparison done")
 
 
     def sketching(self):
@@ -80,7 +79,7 @@ class graphMonitor():
                 sketches[seed][self.hash(asn,seed)][asn] = prob
 
         # compute the simhash for each hash function
-        hashes= self.pool.map(sketchesSimhash, sketches.itervalues())
+        hashes= self.workers.map(sketchesSimhash, sketches.itervalues())
         # hashes= map(sketchesSimhash, sketches.itervalues())
 
         return dict(zip(sketches.keys(), hashes)), sketches

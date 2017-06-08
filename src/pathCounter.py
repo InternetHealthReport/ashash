@@ -13,12 +13,12 @@ def pathCountDict():
 
 class pathCounter(threading.Thread):
 
-    def __init__(self, ribfile, updatefile, announceQueue, countQueue, spatialResolution=1, af=4, timeWindow=900 ):
+    def __init__(self, ribfile, updatefiles, announceQueue, countQueue, spatialResolution=1, af=4, timeWindow=900 ):
         threading.Thread.__init__ (self)
         self.__nbaddr = {4:{i: 2**(32-i) for i in range(33) }, 6: {i: 2**(128-i) for i in range(129) }}
 
         self.ribfile = ribfile
-        self.updatefiles = updatefile
+        self.updatefiles = updatefiles
         self.announceQueue = announceQueue
         self.countQueue = countQueue
 
@@ -263,15 +263,14 @@ class pathCounter(threading.Thread):
             
             else:
                 # Announce: update counters
-                zTd, zDt, zS, zOrig, zAS, zPfx, sPath, zPro, zOr, z0, z1, z2, z3, z4, z5 = res
+                zTd, zDt, zS, zOrig, zAS, zPfx, sPath = res[:7]
                 path = sPath.split(" ")
 
                 if len(path) < 2:
                     # Ignoring paths with only one AS
                     continue
 
-
-                self.announceQueue.put( (zTd, zDt, zS, zOrig, zAS, zPfx, path, zPro, zOr, z0, z1, z2, z3, z4, z5 ) )
+                self.announceQueue.put( res )
 
                 if  zOrig not in self.peers:
                     # no need to update the counts for non-full feed peers

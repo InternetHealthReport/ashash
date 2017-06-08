@@ -43,11 +43,11 @@ logging.info("Arguments: %s" % args)
 # Initialisation
 announceQueue = Queue.Queue(5000)
 countQueue = Queue.Queue(10)
-hegemonyQueue = Queue.Queue(10)
-hegemonyQueuePM = Queue.Queue(10)
-saverQueue = mpQueue(500)
+hegemonyQueue = Queue.Queue(100)
+hegemonyQueuePM = Queue.Queue(100)
+saverQueue = mpQueue(5000)
 
-nbGM = 5 
+nbGM = 6 
 pipeGM = []
 gm = []
 sqldb = args.output+"ashash_results.sql"
@@ -74,6 +74,7 @@ pc.start()
 # Broadcast AS hegemony results to pathMonitor and graphMonitor
 while pc.isAlive():
     elem = hegemonyQueue.get()
+    # logging.debug("(main) dispatching hegemony %s" % elem[1])
     if elem[1] == "all":
         pipeGM[0].send( elem )
     else:

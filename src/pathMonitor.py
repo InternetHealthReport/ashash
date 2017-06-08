@@ -26,22 +26,25 @@ class pathMonitor(threading.Thread):
         while True:
             try:
                 _, scope, hege = self.hegemonyQueue.get_nowait() 
+                # logging.debug("(pathMonitor) New hegemony results")
                 self.hegemony[scope] = hege 
             except Queue.Empty:
                 pass
 
-            msg = self.announceQueue.get()
-            if not self.hegemony is None:
+            try:
+                msg = self.announceQueue.get_nowait()
                 self.detectValley(msg)
+                self.announceQueue.task_done()
+            except Queue.Empty:
+                pass
 
-            self.announceQueue.task_done()
 
 
     def detectValley(self,msg):
     #TODO: clean this function
     #TODO: check if the hegemony scores are not too old..
-        zTd, zDt, zS, zOrig, zAS, zPfx, path, zPro, zOr, z0, z1, z2, z3, z4, z5 = msg
-        path = list(unique_justseen(path))
+        # zTd, zDt, zS, zOrig, zAS, zPfx, path, zPro, zOr, z0, z1, z2, z3, z4, z5 = msg
+        path = list(unique_justseen(msg[6].split(" ")))
         origas = path[-1]
 
         if not origas in self.hegemony:
@@ -64,7 +67,8 @@ class pathMonitor(threading.Thread):
             for i, d in enumerate(hegeAll[1:]):
                 if goingDown and d>prev:
                     #TODO compute anomalous score
-                    self.saverQueue.put( ("anomalouspath", [zTd, msg, origas, path[i+1], hege, d]) )
+                    if not saverQueue is None:
+                        self.saverQueue.put( ("anomalouspath", [msg[1], str(msg), origas, path[i+1], str(hege), d]) )
 
                     # print "(pathMonitor) anomalous transit: %s" % path[i+1]
                     # anomalousTransit[path[i+1]]+=1 #+1 because we ignore the peer AS in hegeAll
