@@ -54,6 +54,9 @@ class asHegemony(threading.Thread):
 
                 # asHege = self.asHegemony(peers, count)
                 # origAShege.append((ts, asn, asHege))
+                if hege is None:
+                    continue
+
                 self.hegemonyQueue.put((ts, hege[0], hege[1]))
                 if not self.saverQueue is None:
                     self.saverQueue.put( ("hegemony", (ts, hege[0], hege[1])) )
