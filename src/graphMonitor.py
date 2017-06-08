@@ -59,7 +59,7 @@ class graphMonitor():
         while True:
             # logging.debug("Waiting for data")
             self.ts, self.scope, self.hegemony = self.hegemonyPipe.recv() 
-            # logging.debug("Before sketching")
+            logging.debug("Before sketching (AS %s)" % self.scope)
             res = self.sketching()
 
             # logging.debug("Sketching done")
@@ -69,7 +69,7 @@ class graphMonitor():
 
             self.previousResults[self.scope] = res
             
-            # logging.debug("Comparison done")
+            logging.debug("done (AS %s)" % self.scope)
 
 
     def sketching(self):
