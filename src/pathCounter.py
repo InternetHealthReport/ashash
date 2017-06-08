@@ -163,7 +163,7 @@ class pathCounter(threading.Thread):
             if zPfx == "0.0.0.0/0":
                 continue
 
-            self.peersAS[zOrig].add(zAS)
+            self.peersASN[zOrig].add(zAS)
 
             path = sPath.split(" ")
             origAS = path[-1]
