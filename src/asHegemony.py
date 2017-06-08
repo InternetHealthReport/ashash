@@ -6,9 +6,9 @@ from multiprocessing import Pool
 import itertools
 
 def asHegemonyMetric( param ): 
-    (asn, counter), peers, alpha = param
+    (scope, counter), peers, alpha = param
 
-    if asn.startswith("{"):
+    if scope.startswith("{"):
         #TODO handle set origins
         return None
 
@@ -23,7 +23,7 @@ def asHegemonyMetric( param ):
         # Adaptively filter low/high betweenness centrality scores
         asHege[asn] = float(stats.trim_mean(allScores, alpha))
 
-    return asn, asHege 
+    return scope, asHege 
 
 
 class asHegemony(threading.Thread):
@@ -58,7 +58,8 @@ class asHegemony(threading.Thread):
                 if hege is None or hege[0].startswith("{"):
                     continue
 
-                self.hegemonyQueue.put((ts, hege[0], hege[1]))
+                logging.debug("(AS hegemony) send hegemony results %s" % hege[0])
+                self.hegemonyQueue.put( (ts, hege[0], hege[1]) )
                 if not self.saverQueue is None:
                     self.saverQueue.put( ("hegemony", (ts, hege[0], hege[1])) )
 

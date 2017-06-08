@@ -46,17 +46,16 @@ countQueue = Queue.Queue(10)
 hegemonyQueue = Queue.Queue(10000)
 hegemonyQueuePM = Queue.Queue(10000)
 saverQueue = mpQueue(10000)
-
 nbGM = 6 
 pipeGM = []
-gm = []
-sqldb = args.output+"ashash_results.sql"
-
-# Analysis Modules
 for i in range(nbGM):
     # recv, send = 
     pipeGM.append(mpPipe(False))
 
+
+
+# Analysis Modules
+gm = []
 for i in range(nbGM):
     gm.append( Process(target=graphMonitor.graphMonitor, args=(pipeGM[i][0], args.N, args.M, args.distThresh, args.minVoteRatio, saverQueue), name="GM%s" % i ))
 
@@ -64,6 +63,7 @@ pc = pathCounter.pathCounter(args.ribs, args.updates, announceQueue, countQueue,
 pm = pathMonitor.pathMonitor(hegemonyQueuePM, announceQueue, saverQueue=saverQueue)
 ash = asHegemony.asHegemony(countQueue, hegemonyQueue, saverQueue=saverQueue)
 
+sqldb = args.output+"ashash_results.sql"
 ss = Process(target=saverSQLite.saverSQLite, args=(sqldb, saverQueue), name="saverSQLite")
 ss.start()
 saverQueue.put(("experiment", [datetime.now(), str(sys.argv), str(args)]))
