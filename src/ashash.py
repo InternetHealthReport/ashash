@@ -43,9 +43,9 @@ logging.info("Arguments: %s" % args)
 # Initialisation
 announceQueue = Queue.Queue(5000)
 countQueue = Queue.Queue(10)
-hegemonyQueue = Queue.Queue(100)
-hegemonyQueuePM = Queue.Queue(100)
-saverQueue = mpQueue(5000)
+hegemonyQueue = Queue.Queue(10000)
+hegemonyQueuePM = Queue.Queue(10000)
+saverQueue = mpQueue(10000)
 
 nbGM = 6 
 pipeGM = []

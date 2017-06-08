@@ -13,6 +13,7 @@ class saverSQLite(object):
         self.cursor = self.conn.cursor()
         self.saverQueue = saverQueue
         self.expid = None
+        self.prevts = -1
 
         self.run()
 
@@ -64,6 +65,10 @@ class saverSQLite(object):
 
         elif t == "hegemony":
             ts, scope, hege = data
+
+            if self.prevts != ts:
+                self.prevts = ts
+                logging.debug("start recording hegemony")
             
             self.cursor.executemany("INSERT INTO hegemony(ts, scope, asn, hege, expid) VALUES (?, ?, ?, ?, ?)", zip([ts]*len(hege), [scope]*len(hege), hege.keys(), hege.values(), [self.expid]*len(hege)) )
 

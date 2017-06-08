@@ -12,6 +12,7 @@ def asHegemonyMetric( param ):
         #TODO handle set origins
         return None
 
+    # # logging.debug("(AS hegemony) computing hegemony for graph %s" % asn)
     asHege = defaultdict(float)
     peersTotalCount = {p:float(counter["total"][p]) for p in peers if counter["total"][p]>0}
 
@@ -39,6 +40,7 @@ class asHegemony(threading.Thread):
     def run(self):
         while True:
             logging.debug("(AS hegemony) waiting for data")
+            prevts = -1
             ts, peers, counts = self.countQueue.get()
             if not self.saverQueue is None:
                 self.saverQueue.put("BEGIN TRANSACTION;")
@@ -48,13 +50,12 @@ class asHegemony(threading.Thread):
             logging.debug("(AS hegemony) making local graphs hegemony")
             params = itertools.izip(counts["origas"].iteritems(), itertools.repeat(peers), itertools.repeat(self.alpha) )
             logging.debug("(AS hegemony) sending tasks to workers")
-            for hege in self.workers.imap_unordered(asHegemonyMetric, params, 100):
-            # for asn, count in  counts["origas"].iteritems():
-                # # logging.debug("(AS hegemony) computing graph for ASN %s" % asn)
+            for hege in self.workers.imap_unordered(asHegemonyMetric, params, 1000):
+                if prevts != ts:
+                    prevts = ts
+                    logging.debug("(AS hegemony) now it is time to work workers!")
 
-                # asHege = self.asHegemony(peers, count)
-                # origAShege.append((ts, asn, asHege))
-                if hege is None:
+                if hege is None or hege[0].startswith("{"):
                     continue
 
                 self.hegemonyQueue.put((ts, hege[0], hege[1]))
