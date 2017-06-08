@@ -6,7 +6,7 @@ from multiprocessing import Pool
 import itertools
 
 def asHegemonyMetric( param ): 
-    (scope, counter), peers, alpha = param
+    (scope, counter), peersPerASN, alpha = param
 
     if scope.startswith("{"):
         #TODO handle set origins
@@ -14,11 +14,12 @@ def asHegemonyMetric( param ):
 
     # # logging.debug("(AS hegemony) computing hegemony for graph %s" % asn)
     asHege = defaultdict(float)
-    peersTotalCount = {p:float(counter["total"][p]) for p in peers if counter["total"][p]>0}
+    # peersTotalCount = {p:float(counter["total"][p]) for p in peers if counter["total"][p]>0}
+    peerASNTotalCount = {pasn:float(sum([counter["total"][p] for p in peers ])) for pasn, peers in peersPerASN.iteritems() }
 
-    # Compute betweenness centrality for each peer 
     for asn in counter["asn"].iterkeys():
-        allScores = [counter["asn"][asn][p]/peersTotalCount[p] for p in peersTotalCount.iterkeys()]
+        # Compute betweenness centrality for each peer ASN 
+        allScores = [counter["asn"][asn][p]/peerASNTotalCount[p] if peerASNTotalCount[p] > 0 else 0 for pasn in peerASNTotalCount.iterkeys() ]
         
         # Adaptively filter low/high betweenness centrality scores
         asHege[asn] = float(stats.trim_mean(allScores, alpha))
@@ -41,14 +42,14 @@ class asHegemony(threading.Thread):
         while True:
             logging.debug("(AS hegemony) waiting for data")
             prevts = -1
-            ts, peers, counts = self.countQueue.get()
+            ts, peersPerASN, counts = self.countQueue.get()
             if not self.saverQueue is None:
                 self.saverQueue.put("BEGIN TRANSACTION;")
             origAShege = []
 
             # AS hegemony for graph bound to originating AS
             logging.debug("(AS hegemony) making local graphs hegemony")
-            params = itertools.izip(counts["origas"].iteritems(), itertools.repeat(peers), itertools.repeat(self.alpha) )
+            params = itertools.izip(counts["origas"].iteritems(), itertools.repeat(peersPerASN), itertools.repeat(self.alpha) )
             logging.debug("(AS hegemony) sending tasks to workers")
             for hege in self.workers.imap_unordered(asHegemonyMetric, params, 1000):
                 if prevts != ts:
@@ -65,7 +66,7 @@ class asHegemony(threading.Thread):
 
             # AS hegemony for the global graph
             logging.debug("(AS hegemony) making global graph hegemony")
-            _, asHege = asHegemonyMetric( (("all", counts["all"]), peers, self.alpha) )
+            _, asHege = asHegemonyMetric( (("all", counts["all"]), peersPerASN, self.alpha) )
             self.hegemonyQueue.put( (ts, "all", asHege) )
             if not self.saverQueue is None:
                 self.saverQueue.put( ("hegemony", (ts, 0, asHege)) )

@@ -36,7 +36,8 @@ class pathCounter(threading.Thread):
 
         self.ts = None
         self.peers = None
-        self.peersAS = defaultdict(set) 
+        self.peersASN = defaultdict(set) 
+        self.peersPerASN = defaultdict(list)
 
         self.counter = {
                 "all": pathCountDict(),
@@ -48,8 +49,14 @@ class pathCounter(threading.Thread):
         logging.info("Reading RIB files...")
         self.readrib()
         self.peers = self.findFullFeeds()
-        self.peersAS = {p:self.peersAS[p] for p in self.peers} 
-        logging.debug("(pathCounter) %s " % self.peersAS)
+        self.peersASN = {p:self.peersASN[p] for p in self.peers} 
+        for p, a in self.peersASN.iteritems():
+            if len(a)>1:
+                logging.warn("(Path counter) peer %s maps to more than one AS (%s)" % (p,a))
+                continue
+            self.peersPerASN[list(a)[0]].append(p)
+
+        logging.debug("(pathCounter) %s " % self.peersASN)
         self.cleanUnusedCounts()
         logging.info("Reading UPDATE files...")
         for updatefile in self.updatefiles:
@@ -114,8 +121,8 @@ class pathCounter(threading.Thread):
 
     def slideTimeWindow(self,ts):
         logging.debug("(pathCounter) sliding window... (ts=%s)" % self.ts)
-
-        self.countQueue.put( (self.ts, self.peers, self.counter) )
+        
+        self.countQueue.put( (self.ts, self.peersPerASN, self.counter) )
         self.countQueue.join()
         self.ts = ts
         
