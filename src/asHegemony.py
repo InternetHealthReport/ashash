@@ -58,7 +58,7 @@ class asHegemony(threading.Thread):
                 if hege is None or hege[0].startswith("{"):
                     continue
 
-                logging.debug("(AS hegemony) send hegemony results %s" % hege[0])
+                # logging.debug("(AS hegemony) send hegemony results %s" % hege[0])
                 self.hegemonyQueue.put( (ts, hege[0], hege[1]) )
                 if not self.saverQueue is None:
                     self.saverQueue.put( ("hegemony", (ts, hege[0], hege[1])) )
