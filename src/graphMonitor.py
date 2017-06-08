@@ -94,6 +94,9 @@ class graphMonitor():
         diff = defaultdict(int)
         for seed, sketchSet in prevHash.iteritems():
             for m, prevHash in sketchSet.iteritems():
+                if not m in currHash[seed]:
+                    continue
+
                 distance = prevHash.distance(currHash[seed][m]) 
                 cumDistance += distance
                 if distance > self.distThresh:

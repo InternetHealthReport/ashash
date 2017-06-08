@@ -67,7 +67,7 @@ class pathMonitor(threading.Thread):
             for i, d in enumerate(hegeAll[1:]):
                 if goingDown and d>prev:
                     #TODO compute anomalous score
-                    if not saverQueue is None:
+                    if not self.saverQueue is None:
                         self.saverQueue.put( ("anomalouspath", [msg[1], str(msg), origas, path[i+1], str(hege), d]) )
 
                     # print "(pathMonitor) anomalous transit: %s" % path[i+1]

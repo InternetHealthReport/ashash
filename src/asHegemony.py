@@ -48,7 +48,7 @@ class asHegemony(threading.Thread):
             logging.debug("(AS hegemony) making local graphs hegemony")
             params = itertools.izip(counts["origas"].iteritems(), itertools.repeat(peers), itertools.repeat(self.alpha) )
             logging.debug("(AS hegemony) sending tasks to workers")
-            for hege in self.workers.imap_unordered(asHegemonyMetric, params):
+            for hege in self.workers.imap_unordered(asHegemonyMetric, params, 100):
             # for asn, count in  counts["origas"].iteritems():
                 # # logging.debug("(AS hegemony) computing graph for ASN %s" % asn)
 
@@ -63,7 +63,7 @@ class asHegemony(threading.Thread):
 
             # AS hegemony for the global graph
             logging.debug("(AS hegemony) making global graph hegemony")
-            asHege = self.asHegemony(peers, counts["all"])
+            _, asHege = asHegemonyMetric( (("all", counts["all"]), peers, self.alpha) )
             self.hegemonyQueue.put( (ts, "all", asHege) )
             if not self.saverQueue is None:
                 self.saverQueue.put( ("hegemony", (ts, 0, asHege)) )
