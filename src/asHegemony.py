@@ -19,7 +19,7 @@ def asHegemonyMetric( param ):
 
     for asn in counter["asn"].iterkeys():
         # Compute betweenness centrality for each peer ASN 
-        allScores = [counter["asn"][asn][p]/peerASNTotalCount[p] if peerASNTotalCount[p] > 0 else 0 for pasn in peerASNTotalCount.iterkeys() ]
+        allScores = [sum([counter["asn"][asn][p] for p in peers])/peerASNTotalCount[pasn] if peerASNTotalCount[pasn] > 0 else 0 for pasn, peers in peersPerASN.iteritems() ]
         
         # Adaptively filter low/high betweenness centrality scores
         asHege[asn] = float(stats.trim_mean(allScores, alpha))
