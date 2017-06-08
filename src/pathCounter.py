@@ -7,8 +7,14 @@ import threading
 import copy
 import logging
 
+
+# Needed for pickling objects
+def __ddint():
+    return defaultdict(int)
+
+
 def pathCountDict():
-    return {"total": defaultdict(int), "asn": defaultdict(lambda : defaultdict(int)) ,}
+    return {"total": defaultdict(int), "asn": defaultdict(__ddint) ,}
 
 
 class pathCounter(threading.Thread):

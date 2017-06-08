@@ -5,7 +5,9 @@ from collections import defaultdict
 from multiprocessing import Pool
 import itertools
 
-def asHegemonyMetric( (asn, counter), peers, alpha):
+def asHegemonyMetric( param ): 
+    (asn, counter), peers, alpha = param
+
     if asn.startswith("{"):
         #TODO handle set origins
         return None
