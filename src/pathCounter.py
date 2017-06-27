@@ -1,4 +1,5 @@
 from subprocess import Popen, PIPE
+import os
 import glob
 import radix
 from collections import defaultdict
@@ -19,7 +20,7 @@ def pathCountDict():
 
 class pathCounter(threading.Thread):
 
-    def __init__(self, ribfile, updatefiles, announceQueue, countQueue, spatialResolution=1, af=4, timeWindow=900 ):
+    def __init__(self, ribfile, updatefiles, announceQueue, countQueue, ribQueue, spatialResolution=1, af=4, timeWindow=900 ):
         threading.Thread.__init__ (self)
         self.__nbaddr = {4:{i: 2**(32-i) for i in range(33) }, 6: {i: 2**(128-i) for i in range(129) }}
 
@@ -27,6 +28,7 @@ class pathCounter(threading.Thread):
         self.updatefiles = updatefiles
         self.announceQueue = announceQueue
         self.countQueue = countQueue
+        self.ribQueue = ribQueue
 
         self.spatialResolution = spatialResolution
         self.af = af
@@ -58,9 +60,18 @@ class pathCounter(threading.Thread):
 
         logging.debug("(pathCounter) %s " % self.peersASN)
         self.cleanUnusedCounts()
+
         logging.info("Reading UPDATE files...")
+        noUpdates = True
         for updatefile in self.updatefiles:
-            self.readupdates(updatefile)
+            if updatefile.startswith("@bgpstream") or os.path.exists(updatefile):
+                noUpdates = False
+                self.readupdates(updatefile)
+            else:
+                logging.info("Ignoring update file: %s" % updatefile)
+
+        if noUpdates:
+            self.slideTimeWindow(0)
 
 
     def nbIPs(self, prefixlen):
@@ -148,7 +159,7 @@ class pathCounter(threading.Thread):
             else:
                 afFilter =  "0.0.0.0/0"
 
-            p1 = Popen(["bgpreader","-m", "-w", self.ribfile.rpartition(":")[2],"-k", afFilter, "-c","route-views.linx", "-c", "route-views2", "-c", "rrc00", "-c", "rrc10", "-t","ribs"], stdout=PIPE)
+            p1 = Popen(["bgpreader","-m", "-w", self.ribfile.rpartition(":")[2],"-k", afFilter,"-j", "2501", "-c","route-views.linx", "-c", "route-views2", "-c", "rrc00", "-c", "rrc10", "-t","ribs"], stdout=PIPE)
         else:
             p1 = Popen(["bgpdump", "-m", "-v", "-t", "change", self.ribfile], stdout=PIPE, bufsize=-1)
 
@@ -171,6 +182,9 @@ class pathCounter(threading.Thread):
                 # Ignore paths with only one AS
                 continue
 
+            if not self.ribQueue is None:
+                self.ribQueue.put( (zTd, zDt, zS, zOrig, zAS, zPfx, path, zOther) )
+
             node = self.rtree.add(zPfx)
             node.data[zOrig] = {"path": set(path), "count": 0, "origAS":origAS}
 
@@ -183,9 +197,7 @@ class pathCounter(threading.Thread):
 
                 # Update above nodes
                 parent = self.findParent(node, zOrig)
-                if parent is None:
-                    self.incTotalCount(count, zOrig, origAS, zAS)
-                else:
+                if not parent is None:
                     parent.data[zOrig]["count"] -= count
                     pOrigAS = parent.data[zOrig]["origAS"]
                     asns = parent.data[zOrig]["path"]
