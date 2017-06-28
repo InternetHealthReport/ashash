@@ -30,6 +30,7 @@ def asHegemonyMetric( param ):
 class asHegemony(threading.Thread):
     def __init__(self, countQueue, hegemonyQueue, alpha=0.1, saverQueue=None):
         threading.Thread.__init__(self)
+
         self.countQueue = countQueue
         self.hegemonyQueue = hegemonyQueue
         self.alpha = alpha

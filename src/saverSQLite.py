@@ -27,6 +27,7 @@ class saverSQLite(object):
                 self.cursor.execute(elem)
             else:
                 self.save(elem)
+            self.saverQueue.task_done()
 
 
     def createdb(self):

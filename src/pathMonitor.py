@@ -3,6 +3,7 @@ import logging
 import Queue
 import numpy as np
 import itertools
+import time
 
 from  more_itertools import unique_justseen
 
@@ -36,8 +37,7 @@ class pathMonitor(threading.Thread):
                 self.detectValley(msg)
                 self.announceQueue.task_done()
             except Queue.Empty:
-                pass
-
+                time.sleep(1)
 
 
     def detectValley(self,msg):
