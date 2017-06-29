@@ -48,8 +48,8 @@ if args.asGraph:
     ribQueue = Queue.Queue(5000)
 announceQueue = Queue.Queue(5000)
 countQueue = Queue.Queue(10)
-hegemonyQueue = Queue.Queue(10000)
-hegemonyQueuePM = Queue.Queue(10000)
+hegemonyQueue = Queue.Queue(60000)
+hegemonyQueuePM = Queue.Queue(60000)
 saverQueue = mpQueue(10000)
 nbGM = 6 
 pipeGM = []
@@ -80,30 +80,35 @@ for g in gm:
     g.start();
 if not ag is None:
     ag.start()
-pm.start()
 ash.start()
 pc.start()
 
 # Broadcast AS hegemony results to pathMonitor and graphMonitor
 firstTime = True
-while pc.isAlive():
-    elem = hegemonyQueue.get()
-    if firstTime:
-        firstTime=False
-        logging.debug("writing graph")
-        if not ag is None:
-            ag.saveGraph(args.output+"asgraph_%s.txt" % args.ribs)
-    # logging.debug("(main) dispatching hegemony %s" % elem[1])
-    if elem[1] == "all":
-        pipeGM[0][1].send( elem )
-    else:
-        pipeGM[int(elem[1])%nbGM][1].send( elem )
-        hegemonyQueuePM.put( elem )
+while pc.isAlive() or (not hegemonyQueue.empty()) or (not countQueue.empty()):
+    try:
+        elem = hegemonyQueue.get(timeout=5)
+        if firstTime:
+            firstTime=False
+            pm.start() # start late to avoid looping unecessarily
+            logging.debug("writing graph")
+            if not ag is None:
+                ag.saveGraph(args.output+"asgraph_%s.txt" % args.ribs)
+        # logging.debug("(main) dispatching hegemony %s" % elem[1])
+        if elem[1] == "all":
+            pipeGM[0][1].send( elem )
+        else:
+            pipeGM[int(elem[1])%nbGM][1].send( elem )
+            hegemonyQueuePM.put( elem )
+    except Queue.Empty:
+        pass
 
+logging.debug("Outside the main loop")
 announceQueue.join()
 countQueue.join()
 saverQueue.join()
 
+logging.debug("Killing child processes")
 ss.terminate()
 for g in gm: 
     g.terminate()

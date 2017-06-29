@@ -68,10 +68,13 @@ class pathCounter(threading.Thread):
                 noUpdates = False
                 self.readupdates(updatefile)
             else:
-                logging.info("Ignoring update file: %s" % updatefile)
+                logging.info("(pathCounter) Ignoring update file: %s" % updatefile)
 
         if noUpdates:
-            self.slideTimeWindow(0)
+            self.ts = 0
+            self.slideTimeWindow(1)
+
+        logging.info("(pathCounter) Finished to read data")
 
 
     def nbIPs(self, prefixlen):
@@ -143,12 +146,15 @@ class pathCounter(threading.Thread):
     def incTotalCount(self, count, peerip, origAS, zAS):
         self.counter["all"]["total"][peerip] += count
         self.counter["origas"][origAS]["total"][peerip] += count
+        # assert self.counter["origas"][origAS]["total"][peerip] >= 0
 
 
     def incCount(self, count, peerip, origAS, peerAS, asns):
         for asn in asns:
             self.counter["all"]["asn"][asn][peerip] += count
             self.counter["origas"][origAS]["asn"][asn][peerip] += count
+            # assert self.counter["all"]["asn"][asn][peerip] >= 0
+            # assert self.counter["origas"][origAS]["asn"][asn][peerip] >= 0
 
 
     def readrib(self):
@@ -159,7 +165,7 @@ class pathCounter(threading.Thread):
             else:
                 afFilter =  "0.0.0.0/0"
 
-            p1 = Popen(["bgpreader","-m", "-w", self.ribfile.rpartition(":")[2],"-k", afFilter,"-j", "2501", "-c","route-views.linx", "-c", "route-views2", "-c", "rrc00", "-c", "rrc10", "-t","ribs"], stdout=PIPE)
+            p1 = Popen(["bgpreader","-m", "-w", self.ribfile.rpartition(":")[2],"-k", afFilter, "-c","route-views.linx", "-c", "route-views2", "-c", "rrc00", "-c", "rrc10", "-t","ribs"], stdout=PIPE)
         else:
             p1 = Popen(["bgpdump", "-m", "-v", "-t", "change", self.ribfile], stdout=PIPE, bufsize=-1)
 
@@ -182,27 +188,37 @@ class pathCounter(threading.Thread):
                 # Ignore paths with only one AS
                 continue
 
+            node = self.rtree.add(zPfx)
+            if zOrig in node.data:
+                # Already read this entry, we should read only one RIB per peer
+                continue
+
             if not self.ribQueue is None:
                 self.ribQueue.put( (zTd, zDt, zS, zOrig, zAS, zPfx, path, zOther) )
 
-            node = self.rtree.add(zPfx)
+
             node.data[zOrig] = {"path": set(path), "count": 0, "origAS":origAS}
 
             if self.spatialResolution:
+                # compute weight for this path
                 count = self.nbIPs(node.prefixlen)
-
-                countBelow = sum([n.data[zOrig]["count"] for n in self.rtree.search_covered(zPfx) if zOrig in n.data])
+                countBelow = sum([n.data[zOrig]["count"] for n in self.rtree.search_covered(zPfx) if n.parent == node and zOrig in n.data])
                 count -= countBelow
+                # assert count >= 0
                 node.data[zOrig]["count"] = count
 
                 # Update above nodes
                 parent = self.findParent(node, zOrig)
                 if not parent is None:
-                    parent.data[zOrig]["count"] -= count
+                    pcountBelow = sum([n.data[zOrig]["count"] for n in self.rtree.search_covered(parent.prefix) if n.parent == parent and zOrig in n.data])
+                    oldpCount = parent.data[zOrig]["count"]
+                    pCount = self.nbIPs(parent.prefixlen) - pcountBelow
+                    pdiff = pCount - oldpCount
+                    parent.data[zOrig]["count"] = pCount 
                     pOrigAS = parent.data[zOrig]["origAS"]
                     asns = parent.data[zOrig]["path"]
-                    self.incCount(-count, zOrig, pOrigAS, zAS, asns)
-                    self.incTotalCount(-count, zOrig, pOrigAS, zAS)
+                    self.incCount(pdiff, zOrig, pOrigAS, zAS, asns)
+                    self.incTotalCount(pdiff, zOrig, pOrigAS, zAS)
             else:
                 count = 1
 
@@ -267,12 +283,16 @@ class pathCounter(threading.Thread):
                             self.incTotalCount(-count,  zOrig, origAS, zAS)
                         else:
                             # Add ips to above node and corresponding ASes
-                            parent.data[zOrig]["count"] += count
+                            pcountBelow = sum([n.data[zOrig]["count"] for n in self.rtree.search_covered(parent.prefix) if n.parent == parent and zOrig in n.data])
+                            oldpCount = parent.data[zOrig]["count"]
+                            pCount = self.nbIPs(parent.prefixlen) - pcountBelow
+                            pdiff = pCount - oldpCount
+                            parent.data[zOrig]["count"] = pCount 
                             porigAS = parent.data[zOrig]["origAS"]
                             asns= parent.data[zOrig]["path"]
-                            self.incCount(count,  zOrig, porigAS, zAS, asns)
-                            self.incTotalCount(count, zOrig, porigAS, zAS)
-                            self.incTotalCount(-count, zOrig, origAS, zAS)
+                            self.incCount(pdiff,  zOrig, porigAS, zAS, asns)
+                            self.incTotalCount(pdiff, zOrig, porigAS, zAS)
+                            self.incTotalCount(count, zOrig, origAS, zAS)
 
                         asns = node.data[zOrig]["path"]
                         self.incCount(count,  zOrig, origAS, zAS, asns)
@@ -311,7 +331,7 @@ class pathCounter(threading.Thread):
                     if self.spatialResolution:
                         # Compute the exact number of IPs
                         count = self.nbIPs(node.prefixlen)
-                        countBelow = sum([n.data[zOrig]["count"] for n in self.rtree.search_covered(zPfx) if zOrig in n.data])
+                        countBelow = sum([n.data[zOrig]["count"] for n in self.rtree.search_covered(zPfx) if n.parent == node and zOrig in n.data])
                         count -= countBelow
 
                         parent = self.findParent(node, zOrig)
@@ -319,11 +339,15 @@ class pathCounter(threading.Thread):
                             self.incTotalCount(count,  zOrig, origAS, zAS)
                         else:
                         # Update above nodes 
-                            parent.data[zOrig]["count"] -= count
+                            pcountBelow = sum([n.data[zOrig]["count"] for n in self.rtree.search_covered(parent.prefix) if n.parent == parent and zOrig in n.data])
+                            oldpCount = parent.data[zOrig]["count"]
+                            pCount = self.nbIPs(parent.prefixlen) - pcountBelow
+                            pdiff = pCount - oldpCount
+                            parent.data[zOrig]["count"] = pCount 
                             porigAS = parent.data[zOrig]["origAS"]
                             asns = parent.data[zOrig]["path"]
-                            self.incCount(-count,  zOrig, porigAS, zAS, asns)
-                            self.incTotalCount(-count, zOrig, porigAS, zAS)
+                            self.incCount(pdiff,  zOrig, porigAS, zAS, asns)
+                            self.incTotalCount(pdiff, zOrig, porigAS, zAS)
                             self.incTotalCount(count, zOrig, origAS, zAS)
 
                     else:

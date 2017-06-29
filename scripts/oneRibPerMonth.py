@@ -4,7 +4,7 @@ import calendar
 import os
 import pytz 
 
-years = range(2001, 2018)
+years = range(2002, 2016)
 months = range(1,13)
 days = [15]
 
@@ -20,4 +20,7 @@ for ye in years:
 
             print date
             print('python2 src/ashash.py -g -w 900 "@bgpstream:%s,%s" "None"' % (tss, tse))
-            os.system('python2 src/ashash.py -g -w 900 "@bgpstream:%s,%s" "None"' % (tss, tse))
+            if not os.path.exists("results/asgraph_@bgpstream:%s,%s.txt" % (tss,tse)):
+                os.system('python2 src/ashash.py -g -w 900 "@bgpstream:%s,%s" "None"' % (tss, tse))
+            else:
+                print("skipping this one")

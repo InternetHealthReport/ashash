@@ -37,8 +37,7 @@ class pathMonitor(threading.Thread):
                 self.detectValley(msg)
                 self.announceQueue.task_done()
             except Queue.Empty:
-                time.sleep(1)
-
+                pass
 
     def detectValley(self,msg):
     #TODO: clean this function
