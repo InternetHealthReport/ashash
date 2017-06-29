@@ -27,7 +27,7 @@ class PlotResults(object):
     def hegemonyDistLocalGraph(self):
         """Plot the distribution of AS hegemony for all local graphs"""
 
-        plt.figure()
+        plt.figure(100)
 
         # All local graphs
         data = self.cursor.execute("SELECT hege FROM hegemony WHERE ts=0 AND scope!=0 AND scope!=asn").fetchall()
@@ -57,7 +57,7 @@ class PlotResults(object):
         plt.xlabel("AS hegemony")
         plt.ylabel("CDF")
         plt.tight_layout()
-        plt.xscale("log")
+        # plt.xscale("log")
         plt.yscale("log")
         # plt.xlim([10e-8, 1])
         plt.legend(loc="best")
@@ -65,9 +65,56 @@ class PlotResults(object):
         plt.savefig("results/fig/hegemonyDistLocalGraph.pdf")
 
 
+    def hegemonyDistGlobalGraph(self):
+        """Plot the distribution of AS hegemony for the global graph"""
+
+        plt.figure(101)
+
+        data = self.cursor.execute("SELECT hege FROM hegemony WHERE ts=0 AND scope==0").fetchall()
+        data = [x[0] for x in data]
+        eccdf(data, label="Global Graph")
+
+        plt.xlabel("AS hegemony")
+        plt.ylabel("CDF")
+        plt.tight_layout()
+        # plt.xscale("log")
+        plt.yscale("log")
+        # plt.xlim([10e-8, 1])
+        plt.legend(loc="best")
+
+        plt.savefig("results/fig/hegemonyDistGlobalGraph.pdf")
+
+
+    def nbNodeDistLocalGraph(self):
+        """Plot the distribution of the number of nodes in the local graphs"""
+
+        plt.figure(201)
+
+        data = self.cursor.execute("SELECT count(*) FROM hegemony WHERE ts=0 AND scope!=asn AND scope!=0 group by scope").fetchall()
+        data = [x[0] for x in data]
+        ecdf(data, label="All Nodes")
+
+        data = self.cursor.execute("SELECT count(*) FROM hegemony WHERE ts=0 AND scope!=asn AND scope!=0 and hege!=0 group by scope").fetchall()
+        data = [x[0] for x in data]
+        ecdf(data, label="$\mathcal{H}>0$")
+
+        plt.xlabel("Number of nodes")
+        plt.ylabel("CDF")
+        plt.tight_layout()
+        # plt.xscale("log")
+        # plt.yscale("log")
+        # plt.xlim([10e-8, 1])
+        plt.legend(loc="best")
+
+        plt.savefig("results/fig/nbNodeDistLocalGraph.pdf")
+
 
 if __name__ == "__main__":
     # plot everything
-    pr = PlotResults(db="results/ashash_results_eric.sql")
+    pr = PlotResults(db="results/results_@bgpstream:1152914400,1152928800.sql")
 
     pr.hegemonyDistLocalGraph()
+    pr.hegemonyDistGlobalGraph()
+    pr.nbNodeDistLocalGraph()
+
+
