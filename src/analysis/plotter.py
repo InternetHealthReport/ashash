@@ -15,6 +15,8 @@ def eccdf(a, **kwargs):
     yvals=np.arange(len(sorted))/float(len(sorted))
     plt.plot( sorted, 1-yvals, **kwargs )
 
+    return {k:v for k,v in zip(sorted, 1-yvals)}
+
 
 
 class Plotter(object):
@@ -112,9 +114,9 @@ class Plotter(object):
         plt.figure(fignum)
         data = self.avgData("SELECT asn, hege FROM hegemony WHERE ts=0 AND scope==0")
         if color is None:
-            eccdf(data.values(), label=label)
+            yval = eccdf(data.values(), label=label)
         else:
-            eccdf(data.values(), label=label, c=color)
+            yval = eccdf(data.values(), label=label, c=color)
 
         plt.xlabel("AS hegemony")
         plt.ylabel("CCDF")
@@ -128,7 +130,7 @@ class Plotter(object):
         plt.tight_layout()
         plt.savefig(filename)
 
-        return data
+        return data, yval
 
 
     def nbNodeDistLocalGraph(self, fignum=11, allNodes=False, noZeroNodes=True, filename="results/fig/nbNodeDistLocalGraph.pdf", labelNoZero="$\mathcal{H}>0$", color=None):
@@ -138,7 +140,7 @@ class Plotter(object):
 
         dataAll = None
         if allNodes:
-            dataAll = self.avgData("SELECT scope, count(*) FROM hegemony WHERE ts=0 AND scope!=asn AND scope!=0 group by scope")
+            dataAll = self.avgData("SELECT scope, count(*) FROM hegemony WHERE ts=0 AND scope!=asn AND scope!=0 and scope in (select scope from hegemony where asn=scope and hege=1) group by scope")
             if color is None:
                 ecdf(dataAll.values(), label="All Nodes")
             else:

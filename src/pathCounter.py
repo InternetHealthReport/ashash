@@ -20,7 +20,8 @@ def pathCountDict():
 
 class pathCounter(threading.Thread):
 
-    def __init__(self, ribfile, updatefiles, announceQueue, countQueue, ribQueue, spatialResolution=1, af=4, timeWindow=900 ):
+    def __init__(self, ribfile, updatefiles, announceQueue, countQueue, ribQueue, 
+            spatialResolution=1, af=4, timeWindow=900, asnFilter=None ):
         threading.Thread.__init__ (self)
         self.__nbaddr = {4:{i: 2**(32-i) for i in range(33) }, 6: {i: 2**(128-i) for i in range(129) }}
 
@@ -32,6 +33,7 @@ class pathCounter(threading.Thread):
 
         self.spatialResolution = spatialResolution
         self.af = af
+        self.asnFilter = asnFilter
         self.timeWindow = timeWindow
 
         self.rtree = radix.Radix()
@@ -161,15 +163,21 @@ class pathCounter(threading.Thread):
 
         if self.ribfile.startswith("@bgpstream:"):
             if self.af == 6:
-                afFilter = "::0/0"
+                bgprFilter = "ipversion 6"
             else:
-                afFilter =  "0.0.0.0/0"
+                bgprFilter =  "ipversion 4"
 
-            p1 = Popen(["bgpreader","-m", "-w", self.ribfile.rpartition(":")[2],"-k", afFilter, "-c","route-views.linx", "-c", "route-views2", "-c", "rrc00", "-c", "rrc10", "-t","ribs"], stdout=PIPE)
+            bgprFilter += " and collector route-views.linx and collector route-views2 and collector rrc00 and collector rrc10"
+
+            if not self.asnFilter is None:
+                bgprFilter += ' and path %s$' % self.asnFilter
+            cmd = "bgpreader -m -w "+self.ribfile.rpartition(":")[2]+" -f '"+bgprFilter+"' -t ribs"
+            p1 = Popen(cmd, shell=True ,stdout=PIPE)
         else:
             p1 = Popen(["bgpdump", "-m", "-v", "-t", "change", self.ribfile], stdout=PIPE, bufsize=-1)
 
         for line in p1.stdout: 
+            print line
             zTd, zDt, zS, zOrig, zAS, zPfx, sPath, zOther = line.split('|',7)
 
             if self.af == 4 and ":" in zPfx:
@@ -231,11 +239,16 @@ class pathCounter(threading.Thread):
 
         if updatefile.startswith("@bgpstream:"):
             if self.af == 6:
-                afFilter = "::0/0"
+                bgprFilter = "ipversion 6"
             else:
-                afFilter =  "0.0.0.0/0"
+                bgprFilter =  "ipversion 4"
 
-            p1 = Popen(["bgpreader", "-m", "-w", updatefile.rpartition(":")[2], "-k", afFilter,  "-c", "route-views.linx", "-c", "route-views2", "-c", "rrc00", "-c", "rrc10", "-t", "updates"], stdout=PIPE)
+            if not self.asnFilter is None:
+                bgprFilter += ' and path "%s$" ' % self.asnFilter
+
+            cmd = "bgpreader -m -w '"+self.ribfile.rpartition(":")[2]+"' -f '"+bgprFilter+"' -c route-views.linx -c route-views2 -c rrc00 -c rrc10 -t updates"
+            p1 = Popen(cmd, shell=True, stdout=PIPE)
+
             # p1 = Popen(["bgpreader", "-m", "-w", updatefile.rpartition(":")[2], "-c", "route-views.linx", "-t", "updates"], stdout=PIPE)
         else:
             p1 = Popen(["bgpdump", "-m", "-v", updatefile],  stdout=PIPE, bufsize=-1)

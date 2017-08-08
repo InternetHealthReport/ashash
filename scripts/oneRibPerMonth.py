@@ -4,9 +4,15 @@ import calendar
 import os
 import pytz 
 
-years = range(2002, 2018)
+years = range(2014, 2018)
 months = range(1,13)
 days = [15]
+
+outputDirectory = "resultsv6/"
+spatialResolution = 0
+af = 6
+
+print "IPv%s, spatial resolution=%s" % (af, spatialResolution)
 
 for ye in years:
     for mo in months:
@@ -19,8 +25,8 @@ for ye in years:
             tse = calendar.timegm(end.timetuple())
 
             print date
-            print('python2 src/ashash.py -g -w 900 "@bgpstream:%s,%s" "None"' % (tss, tse))
-            if not os.path.exists("results/asgraph_@bgpstream:%s,%s.txt" % (tss,tse)):
-                os.system('python2 src/ashash.py -g -w 900 "@bgpstream:%s,%s" "None"' % (tss, tse))
+            print('python2 src/ashash.py -a %s -s %s -g -w 900 -o %s "@bgpstream:%s,%s" "None"' % (af, spatialResolution, outputDirectory, tss, tse ))
+            if not os.path.exists("%sasgraph_@bgpstream:%s,%s.txt" % (tss,tse, outputDirectory)):
+                os.system('python2 src/ashash.py -a %s -s %s -g -w 900 -o %s "@bgpstream:%s,%s" "None"' % (af, spatialResolution, outputDirectory, tss, tse))
             else:
                 print("skipping this one")

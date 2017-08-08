@@ -22,6 +22,7 @@ parser.add_argument("-a","--af", help="address family (4, 6)", type=int, default
 parser.add_argument("-N", help="number of hash functions for sketching", type=int, default=16)
 parser.add_argument("-M", help="number of sketches per hash function", type=int, default=128)
 parser.add_argument("-d","--distThresh", help="simhash distance threshold", type=int, default=3)
+parser.add_argument("-f","--filter", help="filter per origin AS", type=str, default=None)
 parser.add_argument("-g","--asGraph", help="dump the global AS graph", action="store_true")
 parser.add_argument("-r","--minVoteRatio", help="Minimum ratio of sketches to detect anomalies (should be between 0 and 1)", type=float, default=0.5)
 parser.add_argument("-s", "--spatial", help="spatial resolution (0 for prefix, 1 for address)", type=int, default=1)
@@ -64,7 +65,9 @@ gm = []
 for i in range(nbGM):
     gm.append( Process(target=graphMonitor.graphMonitor, args=(pipeGM[i][0], args.N, args.M, args.distThresh, args.minVoteRatio, saverQueue), name="GM%s" % i ))
 
-pc = pathCounter.pathCounter(args.ribs, args.updates, announceQueue, countQueue, ribQueue, spatialResolution=args.spatial, af=args.af, timeWindow=args.window )
+pc = pathCounter.pathCounter(args.ribs, args.updates, announceQueue, countQueue,
+        ribQueue, spatialResolution=args.spatial, af=args.af, 
+        asnFilter=args.filter, timeWindow=args.window )
 pm = pathMonitor.pathMonitor(hegemonyQueuePM, announceQueue, saverQueue=saverQueue)
 ash = asHegemony.asHegemony(countQueue, hegemonyQueue, saverQueue=saverQueue)
 ag = None
