@@ -8,6 +8,8 @@ import threading
 import copy
 import logging
 
+from _pybgpstream import BGPStream, BGPRecord, BGPElem
+
 
 # Needed for pickling objects
 def __ddint():
@@ -160,80 +162,113 @@ class pathCounter(threading.Thread):
 
 
     def readrib(self):
+        # create a new bgpstream instance
+        stream = BGPStream()
+        # create a reusable bgprecord instance
+        rec = BGPRecord()
+        bgprFilter = "type ribs"
+        print bgprFilter
 
-        if self.ribfile.startswith("@bgpstream:"):
-            if self.af == 6:
-                bgprFilter = "ipversion 6"
-            else:
-                bgprFilter =  "ipversion 4"
 
-            bgprFilter += " and collector route-views.linx and collector route-views2 and collector rrc00 and collector rrc10"
-
-            if not self.asnFilter is None:
-                bgprFilter += ' and path %s$' % self.asnFilter
-            cmd = "bgpreader -m -w "+self.ribfile.rpartition(":")[2]+" -f '"+bgprFilter+"' -t ribs"
-            p1 = Popen(cmd, shell=True ,stdout=PIPE)
+        if self.af == 6:
+            bgprFilter += " and ipversion 6"
         else:
-            p1 = Popen(["bgpdump", "-m", "-v", "-t", "change", self.ribfile], stdout=PIPE, bufsize=-1)
+            bgprFilter +=  " and ipversion 4"
+        print bgprFilter
 
-        for line in p1.stdout: 
-            print line
-            zTd, zDt, zS, zOrig, zAS, zPfx, sPath, zOther = line.split('|',7)
+        bgprFilter += " and collector route-views.linx \
+and collector route-views2 \
+and collector rrc00 \
+and collector rrc10"
+        print bgprFilter
 
-            if self.af == 4 and ":" in zPfx:
-                continue
-            elif self.af == 6 and "." in zPfx:
-                continue
-            
-            if zPfx == "0.0.0.0/0":
-                continue
-
-            self.peersASN[zOrig].add(zAS)
-
-            path = sPath.split(" ")
-            origAS = path[-1]
-            if len(path) < 2:
-                # Ignore paths with only one AS
-                continue
-
-            node = self.rtree.add(zPfx)
-            if zOrig in node.data:
-                # Already read this entry, we should read only one RIB per peer
-                continue
-
-            if not self.ribQueue is None:
-                self.ribQueue.put( (zTd, zDt, zS, zOrig, zAS, zPfx, path, zOther) )
-
-
-            node.data[zOrig] = {"path": set(path), "count": 0, "origAS":origAS}
-
-            if self.spatialResolution:
-                # compute weight for this path
-                count = self.nbIPs(node.prefixlen)
-                countBelow = sum([n.data[zOrig]["count"] for n in self.rtree.search_covered(zPfx) if n.parent == node and zOrig in n.data])
-                count -= countBelow
-                # assert count >= 0
-                node.data[zOrig]["count"] = count
-
-                # Update above nodes
-                parent = self.findParent(node, zOrig)
-                if not parent is None:
-                    pcountBelow = sum([n.data[zOrig]["count"] for n in self.rtree.search_covered(parent.prefix) if n.parent == parent and zOrig in n.data])
-                    oldpCount = parent.data[zOrig]["count"]
-                    pCount = self.nbIPs(parent.prefixlen) - pcountBelow
-                    pdiff = pCount - oldpCount
-                    parent.data[zOrig]["count"] = pCount 
-                    pOrigAS = parent.data[zOrig]["origAS"]
-                    asns = parent.data[zOrig]["path"]
-                    self.incCount(pdiff, zOrig, pOrigAS, zAS, asns)
-                    self.incTotalCount(pdiff, zOrig, pOrigAS, zAS)
-            else:
-                count = 1
-
-            asns = node.data[zOrig]["path"]
-            self.incTotalCount(count, zOrig, origAS, zAS)
-            self.incCount(count, zOrig, origAS, zAS, asns)
+        if not self.asnFilter is None:
+            bgprFilter += ' and path %s$' % self.asnFilter
         
+        print bgprFilter
+        stream.parse_filter_string(bgprFilter)
+        print bgprFilter
+        # TODO clean this, change the command line 
+        tss = self.ribfile.rpartition(":")[2].split(",")
+        startts = int(tss[0])
+        endts = int(tss[1])
+        stream.add_interval_filter(startts, endts)
+        # cmd = "bgpreader -m -w "+self.ribfile.rpartition(":")[2]+" -f '"+bgprFilter+"' -t ribs"
+        # p1 = Popen(cmd, shell=True ,stdout=PIPE)
+            
+
+        stream.start()
+        # for line in p1.stdout: 
+        while(stream.get_next_record(rec)):
+            zDt = rec.time
+            elem = rec.get_next_elem()
+            while(elem):
+                zOrig = elem.peer_address
+                zAS = elem.peer_asn
+                zPfx = elem.fields["prefix"]
+                sPath = elem.fields["as-path"]
+                print("%s: %s, %s, %s" % (zDt, zAS, zPfx, elem.fields))
+
+                if self.af == 4 and ":" in zPfx:
+                    elem = rec.get_next_elem()
+                    continue
+                elif self.af == 6 and "." in zPfx:
+                    elem = rec.get_next_elem()
+                    continue
+                
+                if zPfx == "0.0.0.0/0":
+                    elem = rec.get_next_elem()
+                    continue
+
+                self.peersASN[zOrig].add(zAS)
+
+                path = sPath.split(" ")
+                origAS = path[-1]
+                if len(path) < 2:
+                    # Ignore paths with only one AS
+                    elem = rec.get_next_elem()
+                    continue
+
+                node = self.rtree.add(zPfx)
+                if zOrig in node.data:
+                    # Already read this entry, we should read only one RIB per peer
+                    elem = rec.get_next_elem()
+                    continue
+
+                if not self.ribQueue is None:
+                    self.ribQueue.put( (zDt, zOrig, zAS, zPfx, path ) )
+
+
+                node.data[zOrig] = {"path": set(path), "count": 0, "origAS":origAS}
+
+                if self.spatialResolution:
+                    # compute weight for this path
+                    count = self.nbIPs(node.prefixlen)
+                    countBelow = sum([n.data[zOrig]["count"] for n in self.rtree.search_covered(zPfx) if n.parent == node and zOrig in n.data])
+                    count -= countBelow
+                    # assert count >= 0
+                    node.data[zOrig]["count"] = count
+
+                    # Update above nodes
+                    parent = self.findParent(node, zOrig)
+                    if not parent is None:
+                        pcountBelow = sum([n.data[zOrig]["count"] for n in self.rtree.search_covered(parent.prefix) if n.parent == parent and zOrig in n.data])
+                        oldpCount = parent.data[zOrig]["count"]
+                        pCount = self.nbIPs(parent.prefixlen) - pcountBelow
+                        pdiff = pCount - oldpCount
+                        parent.data[zOrig]["count"] = pCount 
+                        pOrigAS = parent.data[zOrig]["origAS"]
+                        asns = parent.data[zOrig]["path"]
+                        self.incCount(pdiff, zOrig, pOrigAS, zAS, asns)
+                        self.incTotalCount(pdiff, zOrig, pOrigAS, zAS)
+                else:
+                    count = 1
+
+                asns = node.data[zOrig]["path"]
+                self.incTotalCount(count, zOrig, origAS, zAS)
+                self.incCount(count, zOrig, origAS, zAS, asns)
+            
+                elem = rec.get_next_elem()
 
     def readupdates(self, updatefile):
 

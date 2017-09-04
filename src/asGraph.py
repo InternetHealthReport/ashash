@@ -21,7 +21,7 @@ class asGraph(threading.Thread):
 
 
     def addPath(self, msg):
-        zTd, zDt, zS, zOrig, zAS, zPfx, path, zOther = msg
+        zDt, zOrig, zAS, zPfx, path = msg
 
         for i, as0 in enumerate(path[:-1]):
             self.asgraph.add_edge(as0, path[i+1])

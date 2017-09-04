@@ -98,7 +98,7 @@ class Plotter(object):
         plt.tight_layout()
         # plt.xscale("log")
         plt.yscale("log")
-        plt.xlim([-0.02, 1.02])
+        plt.xlim([-0.02, 0.42])
         # plt.legend(loc="best")
         if not contour is None:
             plt.colorbar(contour)

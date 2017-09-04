@@ -99,15 +99,15 @@ def longitudinalHegemony():
             globalHege[asn][1].append(data[asn])
             globalHege[asn][2].append(yval[data[asn]])
 
-        if ye == 2017:
-            print "-------"
-            for asn, h in [(asn,h) for asn,h in  data.iteritems() if h > 0.05]:
-                print "\t%s hegemony: %s" % (asn, h)
+        # if ye == 2017:
+            # print "-------"
+            # for asn, h in [(asn,h) for asn,h in  data.iteritems() if h > 0.05]:
+                # print "\t%s hegemony: %s" % (asn, h)
 
-            for asn, name in localGraph.iteritems():
-                data = pr.hegemonyDistLocalGraph(asn, title="AS%s %s" % (asn, name), fignum=asn, filename=resultsDirectory+"fig/longitudinalAS%s.pdf" % asn, color=ccmap(yidx/float(len(years))), contour=None)
-                if ye == 2017 and asn==15169:
-                    print [(k,v) for k,v in data.iteritems() if v>0]
+        for asn, name in localGraph.iteritems():
+            data = pr.hegemonyDistLocalGraph(asn, title="AS%s %s" % (asn, name), fignum=asn, filename=resultsDirectory+"fig/longitudinalAS%s.pdf" % asn, color=ccmap(yidx/float(len(years))), contour=None)
+            if ye == 2017 and asn==15169:
+                print [(k,v) for k,v in data.iteritems() if v>0]
 
 
 
