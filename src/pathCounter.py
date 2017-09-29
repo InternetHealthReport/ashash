@@ -208,13 +208,6 @@ and collector rrc10"
                 sPath = elem.fields["as-path"]
                 # print("%s: %s, %s, %s" % (zDt, zAS, zPfx, elem.fields))
 
-                # if self.af == 4 and ":" in zPfx:
-                    # elem = rec.get_next_elem()
-                    # continue
-                # elif self.af == 6 and "." in zPfx:
-                    # elem = rec.get_next_elem()
-                    # continue
-                
                 if zPfx == "0.0.0.0/0":
                     elem = rec.get_next_elem()
                     continue
