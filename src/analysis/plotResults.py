@@ -1,4 +1,5 @@
 import plotter
+from collections import defaultdict
 from datetime import datetime
 from datetime import timedelta
 import calendar
@@ -66,18 +67,41 @@ def longitudinalHegemony():
 
     years = range(2004, 2018)
 
-    localGraph = {6939:"Hurricane Electric", 8075:"Microsoft", 15169:"Google", 2497:"IIJ", 2500:"WIDE", 2501:"U. Tokyo", 32: "Stanford", 1200: "AMSIX", 3356: "Level(3)", 3549:"Global Crossing", 174:"Cogent", 2914:"NTT America", 54113:"Fastly", 16509:"Amazon", 13335:"Cloudflare", 32934:"Facebook", 13414:"Twitter", 35994:"Akamai", 20940:"Akamai"}
-    globalHege = {3356:("L3",[],[]), 7018:("ATT",[],[]), 3257:("GTT",[],[]), 4134:("ChinaNet",[],[]), 174:("Cogent",[],[]), 2914:("NTT",[],[]), 6939:("HE",[],[]), 1299:("Telia",[],[])} #3549:("GlbX", [],[]), 
+    localGraph = {6939:"Hurricane Electric", 8075:"Microsoft", 15169:"Google", 
+            2497:"IIJ", 2500:"WIDE", 2501:"U. Tokyo", 32: "Stanford", 
+            1200: "AMSIX", 3356: "Level(3)", 3549:"Global Crossing", 
+            174:"Cogent", 2914:"NTT America", 54113:"Fastly", 16509:"Amazon", 
+            13335:"Cloudflare", 32934:"Facebook", 13414:"Twitter", 
+            35994:"Akamai", 20940:"Akamai",
+            # DNS root servers
+            26415: "A,J Root", 394353: "B Root", 2149: "C Root", 27: "D Root", 
+            21556:"E Root", 3557:"F Root", 5927:"G Root", 1508:"H Root", 
+            29216:"I Root", 25152:"K Root", 20144:"L Root", 7500:"M Root"}
+    globalHege = {3356:("Level(3)",[],[]), 7018:("ATT",[],[]), 3257:("GTT",[],[]), 
+            4134:("ChinaNet",[],[]), 174:("Cogent",[],[]), 2914:("NTT",[],[]), 
+            6939:("HE",[],[]), 1299:("Telia",[],[])} #3549:("GlbX", [],[]), 
 
     meanH = []
     medianH = []
+    if os.path.exists(resultsDirectory+"rootData.json"):
+        print("loading rootdata.json")
+        rootdata = json.load(open(resultsDirectory+"rootData.json", "r"))
+        transitPerAsn = {k: set([asn for ye, topasn in v.iteritems() for asn, hege in topasn]) for k,v in rootdata.iteritems()}
+        rootdata = defaultdict(dict)
+        print transitPerAsn
+    else:
+        rootdata = defaultdict(dict)
+        transitPerAsn = None
+    fig = None
+    ax = None
+    axins = None
 
     ccmap = mpl.cm.get_cmap('copper_r')
     # Using contourf to provide my colorbar info, then clearing the figure
     Z = [[0,0],[0,0]]
     CS3 = plt.contourf(Z, years, cmap=ccmap)
     plt.clf()
-
+    
     for yidx, ye in enumerate(years):
 
         dbList = listFiles("results","sql",ye)
@@ -87,7 +111,10 @@ def longitudinalHegemony():
         if ye!=years[-1]:
             contour=None
 
-        data, yval = pr.hegemonyDistGlobalGraph(1, resultsDirectory+"fig/longitudinalHegemonyDistGlobal.pdf", label="%s" % (ye), color=ccmap(yidx/float(len(years))), contour=contour)
+        subfig = False
+        if resultsDirectory=="results/":
+            subfig = True
+        data, yval, fig, ax, axins = pr.hegemonyDistGlobalGraph(1, resultsDirectory+"fig/longitudinalHegemonyDistGlobal.pdf", label="%s" % (ye), color=ccmap(yidx/float(len(years))), contour=contour, subfig=subfig, fig=fig, ax=ax, axins=axins)
         meanH.append(np.mean(data.values()))
         medianH.append(np.median(data.values()))
         if len(data):
@@ -95,9 +122,10 @@ def longitudinalHegemony():
             print "%s: mean hegemony=%s, max=%s (AS%s)" % (ye, meanH[-1], data[maxasn], maxasn) 
 
         for asn in globalHege.keys():
-            if asn in data: print "\t%s hegemony: %s" % (asn, data[asn]);
-            globalHege[asn][1].append(data[asn])
-            globalHege[asn][2].append(yval[data[asn]])
+            if asn in data: 
+                print "\t%s hegemony: %s" % (asn, data[asn]);
+                globalHege[asn][1].append(data[asn])
+                globalHege[asn][2].append(yval[data[asn]])
 
         # if ye == 2017:
             # print "-------"
@@ -105,10 +133,19 @@ def longitudinalHegemony():
                 # print "\t%s hegemony: %s" % (asn, h)
 
         for asn, name in localGraph.iteritems():
-            data = pr.hegemonyDistLocalGraph(asn, title="AS%s %s" % (asn, name), fignum=asn, filename=resultsDirectory+"fig/longitudinalAS%s.pdf" % asn, color=ccmap(yidx/float(len(years))), contour=None)
-            if ye == 2017 and asn==15169:
-                print [(k,v) for k,v in data.iteritems() if v>0]
-
+            data = pr.hegemonyDistLocalGraph(asn, title="", fignum=asn, filename=resultsDirectory+"fig/longitudinalAS%s.pdf" % asn, color=ccmap(yidx/float(len(years))), contour=None)
+            # if ye == 2017 or ye == 2016 :
+                # if asn==15169:
+                    # print("Google")
+                    # print [(k,v) for k,v in data.iteritems() if v>0]
+            if asn==3356:
+                print("Level3")
+                print [(k,v) for k,v in data.iteritems() if v>0.01]
+            if name.endswith("Root"):
+                if transitPerAsn is None:
+                    rootdata[name][ye]= [(k,v) for k,v in data.iteritems() if v>0.05]
+                else:
+                    rootdata[name][ye]= [(k,v) for k,v in data.iteritems() if k in transitPerAsn[name]]
 
 
     plt.figure()
@@ -123,16 +160,19 @@ def longitudinalHegemony():
     plt.tight_layout()
     plt.savefig(resultsDirectory+"fig/meanHegemonyEvolution.pdf")
 
-    plt.figure(figsize=(7,3))
+    plt.figure(figsize=(8,3))
     # mk = [".", "^", "<", ">", "v", "s", "x", "d", "p"]
     for i, (asn, values) in enumerate(globalHege.iteritems()):
-        plt.plot(years, values[1], label=values[0])
-    plt.legend(ncol=6)
+        plt.plot(years, values[1], label="%s (%s)" % (values[0], asn))
+    plt.legend(ncol=4)
     plt.ylim([0, 0.25])
     plt.ylabel("AS hegemony")
+    plt.xlabel("Time")
     plt.tight_layout()
     plt.savefig(resultsDirectory+"fig/tier1Hegemony.pdf")
 
+    json.dump(rootdata, open(resultsDirectory+"rootData.json", "w"))
+    print json.dumps(rootdata)
 
 def localGraphNbnodeDist():
     years = [2017] #range(2002,2018)
@@ -173,8 +213,12 @@ def localGraphNbnodeDist():
         for asn, nnode in manytransit:
             print "\t\tAS%s %s transit nodes" % (asn, nnode) 
 
-
         print data["noZero"][15169]
+
+def localGraphTransitEvolution(scope):
+    dbList= ["results/GoogleLeak_20170825new/results_@bgpstream:1503615600,1503622801.sql"]
+    pr = plotter.Plotter(db=dbList)
+    pr.hegemonyEvolutionLocalGraph(scope)
 
 def localGraphNullHegemony():
 
@@ -189,7 +233,9 @@ if __name__ == "__main__":
         json.dump(smallCoeff, open(resultsDirectory+"smallCoeff_%s.json" % ye,"w"))
 
     else:
-        localGraphNbnodeDist()
-        longitudinalHegemony()
+        localGraphTransitEvolution(4713)
+        # localGraphNbnodeDist()
+        # longitudinalHegemony()
+
 
 

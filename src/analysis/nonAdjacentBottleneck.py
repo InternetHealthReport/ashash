@@ -4,8 +4,8 @@ import glob
 import sqlite3
 from collections import defaultdict
 
-bnthresh = 0.2 # bottleneck threshold
-dbfiles = glob.glob("results/results_@bgpstream:11*.sql")
+bnthresh = 0.1 # bottleneck threshold
+dbfiles = glob.glob("results/results_@bgpstream:14*.sql")
 
 for f in dbfiles[:]:
     print f
@@ -18,6 +18,7 @@ for f in dbfiles[:]:
         continue
 
     asgraph = nx.read_adjlist(asgraphfile)
+    print "%s: %s nodes" % (asgraphfile, len(asgraph))
     nbnab = defaultdict(int)
     unihome = 0
     nbab = 0
@@ -33,9 +34,9 @@ for f in dbfiles[:]:
         if not scope in asgraph:
             continue
 
-        if len(asgraph.edge[scope])==1:
+        if len(asgraph[scope])==1:
             unihome += 1
-        elif asn in asgraph.edge[scope] :
+        elif asn in asgraph[scope] :
             # the asn with the highest hegemony score is adjacent to the origin AS
             # print "adjacent bottleneck scope=%s, asn=%s, hege=%s" % bn
             nbab += 1

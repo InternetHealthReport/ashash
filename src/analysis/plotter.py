@@ -1,19 +1,29 @@
 from matplotlib import pylab as plt
+import itertools
 import sqlite3
 import numpy as np
 from collections import defaultdict
+from datetime import datetime
+from mpl_toolkits.axes_grid1.inset_locator import zoomed_inset_axes, mark_inset
+import matplotlib.dates as mdates
 
 
-def ecdf(a, **kwargs):
+def ecdf(a, ax=None, **kwargs):
     sorted=np.sort( a )
     yvals=np.arange(len(sorted))/float(len(sorted))
-    plt.plot( sorted, yvals, **kwargs )
+    if ax is None:
+        plt.plot( sorted, yvals, **kwargs )
+    else:
+        ax.plot( sorted, yvals, **kwargs )
 
 
-def eccdf(a, **kwargs):
+def eccdf(a, ax=None, **kwargs):
     sorted=np.sort( a )
     yvals=np.arange(len(sorted))/float(len(sorted))
-    plt.plot( sorted, 1-yvals, **kwargs )
+    if ax is None:
+        plt.plot( sorted, 1-yvals, **kwargs )
+    else:
+        ax.plot( sorted, 1-yvals, **kwargs )
 
     return {k:v for k,v in zip(sorted, 1-yvals)}
 
@@ -98,7 +108,8 @@ class Plotter(object):
         plt.tight_layout()
         # plt.xscale("log")
         plt.yscale("log")
-        plt.xlim([-0.02, 0.42])
+        plt.xlim([-0.02, 0.5])
+        plt.ylim([0.002, 1.1])
         # plt.legend(loc="best")
         if not contour is None:
             plt.colorbar(contour)
@@ -108,29 +119,46 @@ class Plotter(object):
         return data
 
 
-    def hegemonyDistGlobalGraph(self, fignum=10, filename="results/fig/hegemonyDistGlobalGraph.pdf", label="Global Graph", color=None, contour=None):
+    def hegemonyDistGlobalGraph(self, fignum=10, filename="results/fig/hegemonyDistGlobalGraph.pdf", label="Global Graph", color=None, contour=None, subfig=False, fig=None, ax=None, axins=None):
         """Plot the distribution of AS hegemony for the global graph"""
 
-        plt.figure(fignum)
-        data = self.avgData("SELECT asn, hege FROM hegemony WHERE ts=0 AND scope==0")
+        if fig is None:
+            fig, ax = plt.subplots(num=fignum)
+
+        data = self.avgData("SELECT asn, hege FROM hegemony WHERE ts=0 AND scope=0")
         if color is None:
-            yval = eccdf(data.values(), label=label)
+            yval = eccdf(data.values(), label=label, ax=ax)
         else:
-            yval = eccdf(data.values(), label=label, c=color)
+            yval = eccdf(data.values(), label=label, c=color, ax=ax)
 
-        plt.xlabel("AS hegemony")
-        plt.ylabel("CCDF")
+        if subfig:
+            if axins is None:
+                axins=zoomed_inset_axes(ax, 1.8, loc=1)
+            if color is None:
+                yval = eccdf(data.values(), label=label, ax=axins)
+            else:
+                yval = eccdf(data.values(), label=label, c=color, ax=axins)
+            axins.set_xlim(0.0, 0.2)
+            axins.set_ylim(10e-6, 10e-4)
+            axins.set_yscale("log")
+            plt.yticks(visible=False)
+            plt.xticks(visible=False)
+            mark_inset(ax, axins, loc1=2, loc2=4, fc="none", ec="0.3")
+
+        ax.set_xlabel("AS hegemony")
+        ax.set_ylabel("CCDF")
         # plt.xscale("log")
-        plt.yscale("log")
-        # plt.xlim([0, 0.25])
+        ax.set_yscale("log")
+        ax.set_xlim(-0.02, 0.5)
+        ax.set_ylim(10e-6, 1.1)
 
-        if not contour is None:
-            plt.colorbar(contour)
+        if False and not contour is None and not subfig:
+            fig.colorbar(contour, orientation='horizontal' )
 
-        plt.tight_layout()
-        plt.savefig(filename)
+        fig.tight_layout()
+        fig.savefig(filename)
 
-        return data, yval
+        return data, yval, fig, ax, axins
 
 
     def nbNodeDistLocalGraph(self, fignum=11, allNodes=False, noZeroNodes=True, filename="results/fig/nbNodeDistLocalGraph.pdf", labelNoZero="$\mathcal{H}>0$", color=None):
@@ -172,13 +200,45 @@ class Plotter(object):
 
         return {"all":dataAll, "noZero":dataNoZero}
 
+    def hegemonyEvolutionLocalGraph(self, scope, fignum=12, filename="results/fig/AS%s_hegeEvolution.pdf"):
+
+        filename = filename % scope
+        hege = defaultdict(lambda: defaultdict(list))
+        marker = itertools.cycle(('^', '.', 'x', '+', 'v'))
+        color = itertools.cycle(('C1', 'C0', 'C2', 'C4', 'C3'))
+        fig = plt.figure(fignum, figsize=(5,2.5))
+        ax = plt.subplot()
+        for cursor in self.cursor:
+            data=cursor.execute("SELECT ts, asn, hege  FROM hegemony where hege>0 and scope=%s and asn!=scope order by ts" % (scope))
+            
+            for ts, asn, h in data:
+                if ts==0:
+                    continue
+                hege[asn]["ts"].append(datetime.utcfromtimestamp(ts+900))
+                hege[asn]["hege"].append(h)
+
+            for asn, data in hege.iteritems():
+                plt.plot(data["ts"], data["hege"], marker=marker.next(), color=color.next(), label=str(asn))
+
+        plt.yscale("log")
+        plt.ylabel("AS hegemony")
+        # plt.xlabel("Time")
+        plt.legend(loc='upper center', ncol=5, bbox_to_anchor=(0.5, 1.2), fontsize=9 )
+        # plt.legend(loc='best', ncol=5 )
+        myFmt = mdates.DateFormatter('%H:%M')
+        ax.xaxis.set_major_formatter(myFmt)
+        fig.autofmt_xdate() 
+        # plt.tight_layout()
+        plt.savefig(filename)
+
+
 
 if __name__ == "__main__":
     # plot everything
     pr = Plotter(db="results/results_@bgpstream:1152914400,1152928800.sql")
 
-    pr.hegemonyDistLocalGraph()
+    # pr.hegemonyDistLocalGraph()
     pr.hegemonyDistGlobalGraph()
-    pr.nbNodeDistLocalGraph()
+    # pr.nbNodeDistLocalGraph()
 
 

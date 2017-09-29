@@ -4,13 +4,18 @@ import calendar
 import os
 import pytz 
 
-years = range(2014, 2018)
+years = range(2004, 2014)
 months = range(1,13)
 days = [15]
 
-outputDirectory = "resultsv6/"
-spatialResolution = 0
-af = 6
+af = 4
+
+if af == 4:
+    outputDirectory = "resultsv4/"
+    spatialResolution = 1
+elif af == 6:
+    outputDirectory = "resultsv6/"
+    spatialResolution = 0
 
 print "IPv%s, spatial resolution=%s" % (af, spatialResolution)
 
