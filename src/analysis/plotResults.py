@@ -15,8 +15,9 @@ import json
 import sys
 
 
-resultsDirectory = "results/"
-# resultsDirectory = "resultsv6/"
+# resultsDirectory = "resultsv4/"
+# resultsDirectory = "results/"
+resultsDirectory = "resultsv6/"
 
 def listFiles(prefix, suffix, ye, months = range(1,13), days = [15] ):
 
@@ -79,7 +80,7 @@ def longitudinalHegemony():
             29216:"I Root", 25152:"K Root", 20144:"L Root", 7500:"M Root"}
     globalHege = {3356:("Level(3)",[],[]), 7018:("ATT",[],[]), 3257:("GTT",[],[]), 
             4134:("ChinaNet",[],[]), 174:("Cogent",[],[]), 2914:("NTT",[],[]), 
-            6939:("HE",[],[]), 1299:("Telia",[],[])} #3549:("GlbX", [],[]), 
+            6939:("HE",[],[]), 1299:("Telia",[],[]), 2497:("IIJ",[],[])} #3549:("GlbX", [],[]), 
 
     meanH = []
     medianH = []
@@ -92,6 +93,7 @@ def longitudinalHegemony():
     else:
         rootdata = defaultdict(dict)
         transitPerAsn = None
+
     fig = None
     ax = None
     axins = None
@@ -112,8 +114,9 @@ def longitudinalHegemony():
             contour=None
 
         subfig = False
-        if resultsDirectory=="results/":
+        if resultsDirectory=="resultsv4/":
             subfig = True
+
         data, yval, fig, ax, axins = pr.hegemonyDistGlobalGraph(1, resultsDirectory+"fig/longitudinalHegemonyDistGlobal.pdf", label="%s" % (ye), color=ccmap(yidx/float(len(years))), contour=contour, subfig=subfig, fig=fig, ax=ax, axins=axins)
         meanH.append(np.mean(data.values()))
         medianH.append(np.median(data.values()))
@@ -135,12 +138,12 @@ def longitudinalHegemony():
         for asn, name in localGraph.iteritems():
             data = pr.hegemonyDistLocalGraph(asn, title="", fignum=asn, filename=resultsDirectory+"fig/longitudinalAS%s.pdf" % asn, color=ccmap(yidx/float(len(years))), contour=None)
             # if ye == 2017 or ye == 2016 :
-                # if asn==15169:
-                    # print("Google")
-                    # print [(k,v) for k,v in data.iteritems() if v>0]
-            if asn==3356:
-                print("Level3")
-                print [(k,v) for k,v in data.iteritems() if v>0.01]
+            if asn==15169:
+                print("Google")
+                print [(k,v) for k,v in data.iteritems() if v>0.001]
+            # if asn==20940:
+                # print("Akamai")
+                # print [(k,v) for k,v in data.iteritems() if v>0.01]
             if name.endswith("Root"):
                 if transitPerAsn is None:
                     rootdata[name][ye]= [(k,v) for k,v in data.iteritems() if v>0.05]
@@ -186,6 +189,7 @@ def localGraphNbnodeDist():
     
     for yidx, ye in enumerate(years):
         dbList = listFiles("results", "sql", ye)
+        print dbList
         pr = plotter.Plotter(db=dbList)
         if len(years)>1:
             contour=CS3
@@ -208,17 +212,28 @@ def localGraphNbnodeDist():
 
 
         # ASN with many transit nodes
-        manytransit = [(k,v) for k,v in data["noZero"].iteritems() if v>50]
+        manytransit = [(k,v) for k,v in data["noZero"].iteritems() if v>25]
         print "\t %s ASN with more than 50 transit nodes:" % len(manytransit)
         for asn, nnode in manytransit:
             print "\t\tAS%s %s transit nodes" % (asn, nnode) 
 
         print data["noZero"][15169]
 
-def localGraphTransitEvolution(scope):
-    dbList= ["results/GoogleLeak_20170825new/results_@bgpstream:1503615600,1503622801.sql"]
-    pr = plotter.Plotter(db=dbList)
-    pr.hegemonyEvolutionLocalGraph(scope)
+def localGraphTransitEvolution(scope, name, dbList=None, years=[2017]):
+    if dbList is None:
+        dbList = []
+        for ye in years:
+            dbList.extend(listFiles("results", "sql", ye))
+        pr = plotter.Plotter(db=dbList)
+        pr.hegemonyEvolutionLocalGraph(scope, fileDate=True)
+
+    else:
+        pr = plotter.Plotter(db=dbList)
+        pr.hegemonyEvolutionLocalGraph(scope)
+
+    # plt.title(name+"\n\n")
+    # plt.tight_layout()
+    plt.savefig(resultsDirectory+"fig/%s_AS%s_transitEvolution.pdf" % (name.replace(" ", "_"), scope))
 
 def localGraphNullHegemony():
 
@@ -233,9 +248,15 @@ if __name__ == "__main__":
         json.dump(smallCoeff, open(resultsDirectory+"smallCoeff_%s.json" % ye,"w"))
 
     else:
-        localGraphTransitEvolution(4713)
+        # localGraphTransitEvolution(4713, dbList= ["results/GoogleLeak_20170825new/results_@bgpstream:1503615600,1503622801.sql"])
+        # root_servers = {26415: "AJ Root", 394353: "B Root", 2149: "C Root", 27: "D Root", 
+            # 21556:"E Root",42:"E Root", 3557:"F Root", 5927:"G Root", 1508:"H Root", 
+            # 29216:"I Root", 25152:"K Root", 20144:"L Root", 7500:"M Root"}
+        # for asn, name in root_servers.iteritems(): 
+            # localGraphTransitEvolution(asn, name)
+        # localGraphTransitEvolution(25152, years=range(2004,2018))
         # localGraphNbnodeDist()
-        # longitudinalHegemony()
+        longitudinalHegemony()
 
 
 

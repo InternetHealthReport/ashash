@@ -3,6 +3,7 @@ import os
 import glob
 import radix
 from collections import defaultdict
+from datetime import datetime
 
 import threading
 import copy
@@ -20,15 +21,18 @@ def pathCountDict():
     return {"total": defaultdict(int), "asn": defaultdict(__ddint) ,}
 
 
+def dt2ts(dt):
+    return (dt - datetime(1970, 1, 1)).total_seconds()
+
 class pathCounter(threading.Thread):
 
-    def __init__(self, ribfile, updatefiles, announceQueue, countQueue, ribQueue, 
+    def __init__(self, starttime, endtime, announceQueue, countQueue, ribQueue, 
             spatialResolution=1, af=4, timeWindow=900, asnFilter=None ):
         threading.Thread.__init__ (self)
         self.__nbaddr = {4:{i: 2**(32-i) for i in range(33) }, 6: {i: 2**(128-i) for i in range(129) }}
 
-        self.ribfile = ribfile
-        self.updatefiles = updatefiles
+        self.startts = int(dt2ts(starttime))
+        self.endts = int(dt2ts(endtime))
         self.announceQueue = announceQueue
         self.countQueue = countQueue
         self.ribQueue = ribQueue
@@ -66,15 +70,9 @@ class pathCounter(threading.Thread):
         self.cleanUnusedCounts()
 
         logging.info("Reading UPDATE files...")
-        noUpdates = True
-        for updatefile in self.updatefiles:
-            if updatefile.startswith("@bgpstream") or os.path.exists(updatefile):
-                noUpdates = False
-                self.readupdates(updatefile)
-            else:
-                logging.info("(pathCounter) Ignoring update file: %s" % updatefile)
-
-        if noUpdates:
+        if self.startts != self.endts:
+            self.readupdates()
+        else:
             self.ts = 0
             self.slideTimeWindow(1)
 
@@ -188,11 +186,7 @@ and collector rrc10"
         
         print bgprFilter
         stream.parse_filter_string(bgprFilter)
-        # TODO clean this, change the command line 
-        tss = self.ribfile.rpartition(":")[2].split(",")
-        startts = int(tss[0])
-        endts = int(tss[1])
-        stream.add_interval_filter(startts, endts)
+        stream.add_interval_filter(self.startts-3600, self.startts+3600)
 
         stream.start()
         # for line in p1.stdout: 
@@ -263,7 +257,7 @@ and collector rrc10"
             
                 elem = rec.get_next_elem()
 
-    def readupdates(self, updatefile):
+    def readupdates(self):
         # create a new bgpstream instance
         stream = BGPStream()
         bgprFilter = "type updates"
@@ -286,11 +280,7 @@ and collector rrc10"
             bgprFilter += ' and (path %s$ or elemtype withdrawals)' % self.asnFilter
         
         stream.parse_filter_string(bgprFilter)
-        # TODO clean this, change the command line 
-        tss = updatefile.rpartition(":")[2].split(",")
-        startts = int(tss[0])
-        endts = int(tss[1])
-        stream.add_interval_filter(startts, endts)
+        stream.add_interval_filter(self.startts, self.endts)
 
         stream.start()
         # for line in p1.stdout: 

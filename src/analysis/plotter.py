@@ -1,3 +1,4 @@
+import os
 from matplotlib import pylab as plt
 import itertools
 import sqlite3
@@ -6,7 +7,7 @@ from collections import defaultdict
 from datetime import datetime
 from mpl_toolkits.axes_grid1.inset_locator import zoomed_inset_axes, mark_inset
 import matplotlib.dates as mdates
-
+import networkx as nx
 
 def ecdf(a, ax=None, **kwargs):
     sorted=np.sort( a )
@@ -37,10 +38,12 @@ class Plotter(object):
         if not isinstance(db,list):
             db = [db]
 
+        self.dbfiles = db
         self.cursor = []
         for d in db:
-            conn = sqlite3.Connection(d) 
-            self.cursor.append(conn.cursor())
+            if os.path.getsize(d) > 100000:
+                conn = sqlite3.Connection(d) 
+                self.cursor.append(conn.cursor())
 
 
     def dataSanityCheck(self):
@@ -61,15 +64,24 @@ class Plotter(object):
 
 
 
-    def avgData(self, req):
+    def avgData(self, req, appearance=False):
         alldata = defaultdict(list)
+        nbDates = float(len(self.cursor))
         for c in self.cursor:
             data = c.execute(req).fetchall()
             for x in data:
                 alldata[x[0]].append(x[1])
 
-        return {k:np.mean(v) for k, v in alldata.iteritems()}
+        if appearance :
+            # res = {k:np.sum(v)/float(appearance[str(k)]) for k, v in alldata.iteritems() if appearance[str(k)]>nbDates/2 }
+            res = {k:np.mean(v) for k, v in alldata.iteritems()}
+        else:
+            # if "scope=15169" in req:
+                # print alldata
+            res = {k:np.sum(v)/nbDates for k, v in alldata.iteritems()}
 
+        # print "mean nodes: %s" % np.mean(res.values())
+        return res
 
     def hegemonyDistLocalGraph(self, asn, label=None, title=None, fignum=13, filename="results/fig/hegemonyDistLocalGraph.pdf", color=None, contour=None):
         """Plot the distribution of AS hegemony for all local graphs"""
@@ -96,7 +108,7 @@ class Plotter(object):
         # data = self.avgData("SELECT asn, hege FROM hegemony WHERE ts=0 AND scope!=asn AND scope=32")
         # eccdf(data.values(), label="Stanford")
 
-        data = self.avgData("SELECT asn, hege FROM hegemony WHERE ts=0 AND scope!=asn AND scope=%s" % asn)
+        data = self.avgData("SELECT asn, hege FROM hegemony WHERE ts=0 AND scope!=asn AND scope=%s AND expid=1" % asn)
         if color is None:
             eccdf(data.values(), label=label)
         else:
@@ -125,7 +137,7 @@ class Plotter(object):
         if fig is None:
             fig, ax = plt.subplots(num=fignum)
 
-        data = self.avgData("SELECT asn, hege FROM hegemony WHERE ts=0 AND scope=0")
+        data = self.avgData("SELECT asn, hege FROM hegemony WHERE ts=0 AND scope=0 AND expid=1")
         if color is None:
             yval = eccdf(data.values(), label=label, ax=ax)
         else:
@@ -166,9 +178,21 @@ class Plotter(object):
 
         plt.figure(fignum)
 
+        # count the number of times ASN appeared in the data:
+        appearance = defaultdict(int)
+        for f in self.dbfiles:
+            graphfile = f.replace("results_", "asgraph_").replace("sql", "txt")
+            g = nx.read_adjlist(graphfile)
+
+            for node in set(g.nodes):
+                if node=="65200":
+                    print graphfile
+                appearance[node]+=1
+
         dataAll = None
         if allNodes:
-            dataAll = self.avgData("SELECT scope, count(*) FROM hegemony WHERE ts=0 AND scope!=asn AND scope!=0 and scope in (select scope from hegemony where asn=scope and hege=1) group by scope")
+            # dataAll = self.avgData("SELECT scope, count(*) FROM hegemony WHERE expid=1 AND ts=0 AND scope!=asn AND scope!=0 and scope in (select scope from hegemony where expid=1 and asn=scope and hege=1) group by scope")
+            dataAll = self.avgData("SELECT scope, count(*) FROM hegemony WHERE expid=1 AND ts=0 AND scope!=0  group by scope", True)
             if color is None:
                 ecdf(dataAll.values(), label="All Nodes")
             else:
@@ -176,7 +200,8 @@ class Plotter(object):
         
         dataNoZero = None
         if noZeroNodes:
-            dataNoZero = self.avgData("SELECT scope, sum(case when hege>0.001 then 1 else 0 end) FROM hegemony WHERE ts=0 AND scope!=asn AND scope!=0 and scope in (select scope from hegemony where asn=scope and hege=1) group by scope")
+            dataNoZero = self.avgData("SELECT scope, sum(case when hege>0.01 then 1 else 0 end) FROM hegemony WHERE expid=1 AND ts=0 AND scope!=asn AND scope!=0 and scope in (select scope from hegemony where expid=1 and asn=scope and hege=1) group by scope", True)
+            # dataNoZero = self.avgData("SELECT scope, sum(case when hege>0.001 then 1 else 0 end) FROM hegemony WHERE expid=1 AND ts=0 AND scope!=0 group by scope", appearance)
             if color is None:
                 ecdf(dataNoZero.values(), label=labelNoZero)
             else:
@@ -200,33 +225,40 @@ class Plotter(object):
 
         return {"all":dataAll, "noZero":dataNoZero}
 
-    def hegemonyEvolutionLocalGraph(self, scope, fignum=12, filename="results/fig/AS%s_hegeEvolution.pdf"):
+    def hegemonyEvolutionLocalGraph(self, scope, filename="results/fig/AS%s_hegeEvolution.pdf", fileDate=False):
 
         filename = filename % scope
         hege = defaultdict(lambda: defaultdict(list))
-        marker = itertools.cycle(('^', '.', 'x', '+', 'v'))
+        marker = itertools.cycle(('^', '.', 'x', '+', 'v','*'))
         color = itertools.cycle(('C1', 'C0', 'C2', 'C4', 'C3'))
-        fig = plt.figure(fignum, figsize=(5,2.5))
+        # fig = plt.figure(figsize=(5,2.5))
+        fig = plt.figure()
         ax = plt.subplot()
-        for cursor in self.cursor:
-            data=cursor.execute("SELECT ts, asn, hege  FROM hegemony where hege>0 and scope=%s and asn!=scope order by ts" % (scope))
+        for cursor_id, cursor in enumerate(self.cursor):
+            data=cursor.execute("SELECT ts, asn, hege  FROM hegemony where expid=1 and hege>0 and scope=%s and asn!=scope order by ts" % (scope))
             
             for ts, asn, h in data:
-                if ts==0:
-                    continue
-                hege[asn]["ts"].append(datetime.utcfromtimestamp(ts+900))
+                if ts==0 :
+                    if fileDate:
+                        ts = int(self.dbfiles[cursor_id].rpartition(",")[2].partition(".")[0])
+                    else:
+                        continue
+                xval = datetime.utcfromtimestamp(ts+900)
+                hege[asn]["ts"].append(xval)
                 hege[asn]["hege"].append(h)
 
-            for asn, data in hege.iteritems():
-                plt.plot(data["ts"], data["hege"], marker=marker.next(), color=color.next(), label=str(asn))
+        for asn, data in hege.iteritems():
+            # plt.plot(data["ts"], data["hege"], marker=marker.next(), color=color.next(), label=str(asn))
+            plt.plot(data["ts"], data["hege"], marker=marker.next(), label=str(asn))
 
-        plt.yscale("log")
+        # plt.yscale("log")
         plt.ylabel("AS hegemony")
         # plt.xlabel("Time")
-        plt.legend(loc='upper center', ncol=5, bbox_to_anchor=(0.5, 1.2), fontsize=9 )
-        # plt.legend(loc='best', ncol=5 )
-        myFmt = mdates.DateFormatter('%H:%M')
-        ax.xaxis.set_major_formatter(myFmt)
+        plt.ylim([0.0, 1.05])
+        plt.legend(loc='upper center', ncol=4, bbox_to_anchor=(0.5, 1.2), fontsize=8 )
+        if len(self.dbfiles)==1:
+            myFmt = mdates.DateFormatter('%H:%M')
+            ax.xaxis.set_major_formatter(myFmt)
         fig.autofmt_xdate() 
         # plt.tight_layout()
         plt.savefig(filename)
