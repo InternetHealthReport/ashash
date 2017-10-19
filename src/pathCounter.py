@@ -24,6 +24,7 @@ def pathCountDict():
 def dt2ts(dt):
     return (dt - datetime(1970, 1, 1)).total_seconds()
 
+
 class pathCounter(threading.Thread):
 
     def __init__(self, starttime, endtime, announceQueue, countQueue, ribQueue, 

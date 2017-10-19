@@ -33,7 +33,7 @@ parser.add_argument("-f","--filter", help="filter per origin AS (Deprecated, wil
 parser.add_argument("-g","--asGraph", help="dump the global AS graph", action="store_true")
 parser.add_argument("-r","--minVoteRatio", help="Minimum ratio of sketches to detect anomalies (should be between 0 and 1)", type=float, default=0.5)
 parser.add_argument("-s", "--spatial", help="spatial resolution (0 for prefix, 1 for address)", type=int, default=1)
-parser.add_argument("-w", "--window", help="Time window: time resolution in seconds (works only with  bgpstream)", type=int, default=900)
+parser.add_argument("-w", "--window", help="Time window: time resolution in seconds", type=int, default=900)
 parser.add_argument("-o", "--output", help="output directory", default="results/")
 parser.add_argument("starttime", help="UTC start time, e.g. 2017-10-17T00:00 (should correspond to a date and time when RIB files are available)",  type=valid_date)
 parser.add_argument("endtime", help="UTC end time", type=valid_date)
@@ -81,10 +81,16 @@ ag = None
 if args.asGraph:
     ag = asGraph.asGraph(ribQueue)
 
-sqldb = args.output+"results_%s.sql" % args.starttime
-ss = Process(target=saverSQLite.saverSQLite, args=(sqldb, saverQueue), name="saverSQLite")
-ss.start()
-saverQueue.put(("experiment", [datetime.now(), str(sys.argv), str(args)]))
+if args.output == "@psql/":
+    logging.info("Pushing results to Postgresql")
+    import saverPostgresql
+    ss = Process(target=saverPostgresql.saverPostgresql, args=(args.starttime, args.af, saverQueue), name="saverPostgresql")
+    ss.start()
+else:
+    sqldb = args.output+"results_%s.sql" % args.starttime
+    ss = Process(target=saverSQLite.saverSQLite, args=(sqldb, saverQueue), name="saverSQLite")
+    ss.start()
+    saverQueue.put(("experiment", [datetime.now(), str(sys.argv), str(args)]))
 
 for g in gm: 
     g.start();
