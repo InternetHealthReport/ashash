@@ -1,3 +1,4 @@
+import sys
 import psycopg2
 import logging
 from collections import defaultdict
@@ -95,6 +96,10 @@ class saverPostgresql(object):
 
 
 if __name__ == "__main__":
+    if len(sys.argv)<2:
+        print("usage: %s af" % sys.argv[0])
+        sys.exit()
+
     logging.basicConfig(level=logging.DEBUG)
 
     af = 6
