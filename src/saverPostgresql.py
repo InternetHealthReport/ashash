@@ -10,7 +10,7 @@ class saverPostgresql(object):
 
     """Dumps only hegemony results to a Postgresql database. """
 
-    def __init__(self, starttime, af, saverQueue, host="127.0.0.1", dbname="ihr"):
+    def __init__(self, starttime, af, saverQueue, host="romain.iijlab.net", dbname="ihr"):
        
 
         self.saverQueue = saverQueue
@@ -20,18 +20,19 @@ class saverPostgresql(object):
         self.starttime = starttime
         self.af = af
 
-        # with SSHTunnelForwarder(
-            # 'romain.iijlab.net',
-            # ssh_private_key="/home/romain/.ssh/id_ed25519",
-            # ssh_username="romain",
-            # remote_bind_address=('127.0.0.1', 5432)) as server:
+        self.server = SSHTunnelForwarder(
+            'romain.iijlab.net',
+            ssh_username="romain",
+            ssh_private_key="/home/romain/.ssh/id_rsa",
+            remote_bind_address=('127.0.0.1', 5432),
+            set_keepalive=60) 
 
-            # server.start()
-            # logging.debug("SSH tunnel opened")
-            # local_port = str(server.local_bind_port)
-            # conn_string = "host='127.0.0.1' port='%s' dbname='%s'" % (local_port, dbname)
+        self.server.start()
+        logging.debug("SSH tunnel opened")
+        local_port = str(self.server.local_bind_port)
+        conn_string = "host='127.0.0.1' port='%s' dbname='%s'" % (local_port, dbname)
 
-        conn_string = "host='127.0.0.1' dbname='%s'" % (dbname)
+        # conn_string = "host='127.0.0.1' dbname='%s'" % (dbname)
         self.conn = psycopg2.connect(conn_string)
         self.cursor = self.conn.cursor()
         logging.debug("Connected to the PostgreSQL server")

@@ -15,9 +15,9 @@ import json
 import sys
 
 
-# resultsDirectory = "resultsv4/"
+resultsDirectory = "resultsv4/"
 # resultsDirectory = "results/"
-resultsDirectory = "resultsv6/"
+# resultsDirectory = "resultsv6/"
 
 def listFiles(prefix, suffix, ye, months = range(1,13), days = [15] ):
 
@@ -73,7 +73,7 @@ def longitudinalHegemony():
             1200: "AMSIX", 3356: "Level(3)", 3549:"Global Crossing", 
             174:"Cogent", 2914:"NTT America", 54113:"Fastly", 16509:"Amazon", 
             13335:"Cloudflare", 32934:"Facebook", 13414:"Twitter", 
-            35994:"Akamai", 20940:"Akamai",
+            35994:"Akamai", 20940:"Akamai", 15133:"EdgeCast CDN",
             # DNS root servers
             26415: "A,J Root", 394353: "B Root", 2149: "C Root", 27: "D Root", 
             21556:"E Root", 3557:"F Root", 5927:"G Root", 1508:"H Root", 
