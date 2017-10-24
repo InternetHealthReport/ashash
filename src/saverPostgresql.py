@@ -2,7 +2,6 @@ import psycopg2
 import logging
 from collections import defaultdict
 import json
-from sshtunnel import SSHTunnelForwarder
 import apsw
 import glob
 from datetime import datetime
@@ -15,7 +14,7 @@ class saverPostgresql(object):
 
     """Dumps only hegemony results to a Postgresql database. """
 
-    def __init__(self, starttime, af, saverQueue, host="romain.iijlab.net", dbname="ihr"):
+    def __init__(self, starttime, af, saverQueue, host="localhost", dbname="ihr"):
        
 
         self.saverQueue = saverQueue
@@ -27,6 +26,7 @@ class saverPostgresql(object):
 
         local_port = 5432
         if host != "localhost" and host!="127.0.0.1":
+            from sshtunnel import SSHTunnelForwarder
             self.server = SSHTunnelForwarder(
                 'romain.iijlab.net',
                 ssh_username="romain",
@@ -100,35 +100,37 @@ if __name__ == "__main__":
     af = 6
     directory="newResults%s/" % af
     
-    slf = "results_2017-03-15 00:00:00.sql"
-    data = defaultdict(lambda: defaultdict(lambda: defaultdict(float)))
-    
-    # Get data from the sqlite db
-    conn = apsw.Connection(directory+slf)
-    cursor = conn.cursor()
-    cursor.execute("SELECT scope, ts, asn, hege FROM hegemony ORDER BY scope")
+    for slf in glob.glob(directory+"*.sql"):
+        logging.debug("File: %s" % slf)
+        # slf = "results_2017-03-15 00:00:00.sql"
+        data = defaultdict(lambda: defaultdict(lambda: defaultdict(float)))
+        
+        # Get data from the sqlite db
+        conn = apsw.Connection(slf)
+        cursor = conn.cursor()
+        cursor.execute("SELECT scope, ts, asn, hege FROM hegemony ORDER BY scope")
 
-    for scope, ts, asn, hege in cursor.fetchall():
-        data[scope][ts][asn] = hege
+        for scope, ts, asn, hege in cursor.fetchall():
+            data[scope][ts][asn] = hege
 
-    # Push data to PostgreSQL
-    dt = slf.partition("_")[2]
-    dt = dt.partition(" ")[0]
-    ye, mo, da = dt.split("-")
-    starttime = datetime(int(ye), int(mo), int(da))
+        # Push data to PostgreSQL
+        dt = slf.partition("_")[2]
+        dt = dt.partition(" ")[0]
+        ye, mo, da = dt.split("-")
+        starttime = datetime(int(ye), int(mo), int(da))
 
-    saverQueue = mpQueue(1000)
-    ss = Process(target=saverPostgresql, args=(starttime, af, saverQueue), name="saverPostgresql")
-    ss.start()
+        saverQueue = mpQueue(1000)
+        ss = Process(target=saverPostgresql, args=(starttime, af, saverQueue), name="saverPostgresql")
+        ss.start()
 
-    saverQueue.put("BEGIN TRANSACTION;")
-    for scope, allts in data.iteritems():
-        for ts, hege in allts.iteritems():
-            saverQueue.put(("hegemony", (ts, scope, hege)) )
-    saverQueue.put("COMMIT;")
+        saverQueue.put("BEGIN TRANSACTION;")
+        for scope, allts in data.iteritems():
+            for ts, hege in allts.iteritems():
+                saverQueue.put(("hegemony", (ts, scope, hege)) )
+        saverQueue.put("COMMIT;")
 
-    logging.debug("Finished")
-    saverQueue.join()
-    ss.terminate()
+        logging.debug("Finished")
+        saverQueue.join()
+        ss.terminate()
 
 
