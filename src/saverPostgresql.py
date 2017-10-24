@@ -7,6 +7,7 @@ import apsw
 import glob
 from datetime import datetime
 from multiprocessing import JoinableQueue as mpQueue
+from multiprocessing import Process
 
 #TODO make the timebin value function of what is passed in ts
 
@@ -24,19 +25,20 @@ class saverPostgresql(object):
         self.starttime = starttime
         self.af = af
 
-        self.server = SSHTunnelForwarder(
-            'romain.iijlab.net',
-            ssh_username="romain",
-            ssh_private_key="/home/romain/.ssh/id_rsa",
-            remote_bind_address=('127.0.0.1', 5432),
-            set_keepalive=60) 
+        local_port = 5432
+        if host != "localhost" and host!="127.0.0.1":
+            self.server = SSHTunnelForwarder(
+                'romain.iijlab.net',
+                ssh_username="romain",
+                ssh_private_key="/home/romain/.ssh/id_rsa",
+                remote_bind_address=('127.0.0.1', 5432),
+                set_keepalive=60) 
 
-        self.server.start()
-        logging.debug("SSH tunnel opened")
-        local_port = str(self.server.local_bind_port)
+            self.server.start()
+            logging.debug("SSH tunnel opened")
+            local_port = str(self.server.local_bind_port)
+
         conn_string = "host='127.0.0.1' port='%s' dbname='%s'" % (local_port, dbname)
-
-        # conn_string = "host='127.0.0.1' dbname='%s'" % (dbname)
         self.conn = psycopg2.connect(conn_string)
         self.cursor = self.conn.cursor()
         logging.debug("Connected to the PostgreSQL server")
@@ -78,11 +80,12 @@ class saverPostgresql(object):
                     end $$;""", (scope, self.asNames["AS"+str(scope)], scope))
 
             for asn in hege.keys():
-                if not asn.startswith("{") and int(asn) not in self.asns:
-                    self.asns.add(int(asn))
-                    self.cursor.execute("INSERT INTO ihr_asn(number, name, tartiflette, disco, ashash) select %s, %s, FALSE, FALSE, FALSE WHERE NOT EXISTS ( SELECT number FROM ihr_asn WHERE number = %s); ", (asn, self.asNames["AS"+str(asn)], asn))
+                if  isinstance(asn, int) or not asn.startswith("{"):
+                    if int(asn) not in self.asns :
+                        self.asns.add(int(asn))
+                        self.cursor.execute("INSERT INTO ihr_asn(number, name, tartiflette, disco, ashash) select %s, %s, FALSE, FALSE, FALSE WHERE NOT EXISTS ( SELECT number FROM ihr_asn WHERE number = %s); ", (asn, self.asNames["AS"+str(asn)], asn))
             
-            self.cursor.executemany("INSERT INTO ihr_hegemony(timebin, originasn_id, asn_id, hege, af) VALUES (%s, %s, %s, %s, %s)", [(self.starttime, scope, k, v, self.af) for k,v in hege.iteritems() if not k.startswith("{") ] )
+            self.cursor.executemany("INSERT INTO ihr_hegemony(timebin, originasn_id, asn_id, hege, af) VALUES (%s, %s, %s, %s, %s)", [(self.starttime, scope, k, v, self.af) for k,v in hege.iteritems() if isinstance(k,int) or not k.startswith("{") ] )
 
             # elif t == "graphchange":
                 # self.cursor.execute("INSERT INTO graphchange(ts, scope, asn, nbvote, diffhege, expid) VALUES (?, ?, ?, ?, ?, ?)", data+[self.expid])
@@ -92,6 +95,7 @@ class saverPostgresql(object):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG)
 
     af = 6
     directory="newResults%s/" % af
@@ -114,7 +118,8 @@ if __name__ == "__main__":
     starttime = datetime(int(ye), int(mo), int(da))
 
     saverQueue = mpQueue(1000)
-    saver = saverPostgresql(starttime, af, saverQueue)
+    ss = Process(target=saverPostgresql, args=(starttime, af, saverQueue), name="saverPostgresql")
+    ss.start()
 
     saverQueue.put("BEGIN TRANSACTION;")
     for scope, allts in data.iteritems():
@@ -122,5 +127,8 @@ if __name__ == "__main__":
             saverQueue.put(("hegemony", (ts, scope, hege)) )
     saverQueue.put("COMMIT;")
 
+    logging.debug("Finished")
+    saverQueue.join()
+    ss.terminate()
 
 
