@@ -3,6 +3,10 @@ import logging
 from collections import defaultdict
 import json
 from sshtunnel import SSHTunnelForwarder
+import apsw
+import glob
+from datetime import datetime
+from multiprocessing import JoinableQueue as mpQueue
 
 #TODO make the timebin value function of what is passed in ts
 
@@ -37,6 +41,10 @@ class saverPostgresql(object):
         self.cursor = self.conn.cursor()
         logging.debug("Connected to the PostgreSQL server")
 
+        self.cursor.execute("SELECT number FROM ihr_asn WHERE ashash=TRUE")
+        self.asns = set(self.cursor.fetchall())
+        logging.debug("%s ASNS already registered in the database" % len(self.asns))
+
         self.run()
 
     def run(self):
@@ -60,15 +68,18 @@ class saverPostgresql(object):
                 self.prevts = ts
                 logging.debug("start recording hegemony")
 
-            self.cursor.execute("""do $$
-                begin 
-                    insert into ihr_asn(number, name, tartiflette, disco, ashash) values(%s, %s, FALSE, FALSE, TRUE);
-                exception when unique_violation then
-                    update ihr_asn set ashash = TRUE where number = %s;
-                end $$;""", (scope, self.asNames["AS"+str(scope)], scope))
+            if int(scope) not in self.asns:
+                self.asns.add(int(scope))
+                self.cursor.execute("""do $$
+                    begin 
+                        insert into ihr_asn(number, name, tartiflette, disco, ashash) values(%s, %s, FALSE, FALSE, TRUE);
+                    exception when unique_violation then
+                        update ihr_asn set ashash = TRUE where number = %s;
+                    end $$;""", (scope, self.asNames["AS"+str(scope)], scope))
 
             for asn in hege.keys():
-                if not asn.startswith("{"):
+                if not asn.startswith("{") and int(asn) not in self.asns:
+                    self.asns.add(int(asn))
                     self.cursor.execute("INSERT INTO ihr_asn(number, name, tartiflette, disco, ashash) select %s, %s, FALSE, FALSE, FALSE WHERE NOT EXISTS ( SELECT number FROM ihr_asn WHERE number = %s); ", (asn, self.asNames["AS"+str(asn)], asn))
             
             self.cursor.executemany("INSERT INTO ihr_hegemony(timebin, originasn_id, asn_id, hege, af) VALUES (%s, %s, %s, %s, %s)", [(self.starttime, scope, k, v, self.af) for k,v in hege.iteritems() if not k.startswith("{") ] )
@@ -78,4 +89,38 @@ class saverPostgresql(object):
 
             # elif t == "anomalouspath":
                 # self.cursor.execute("INSERT INTO anomalouspath(ts, path, origas, anoasn, hegepath, score, expid) VALUES (?, ?, ?, ?, ?, ?, ?)", data+[self.expid])
+
+
+if __name__ == "__main__":
+
+    af = 6
+    directory="newResults%s/" % af
+    
+    slf = "results_2017-03-15 00:00:00.sql"
+    data = defaultdict(lambda: defaultdict(lambda: defaultdict(float)))
+    
+    # Get data from the sqlite db
+    conn = apsw.Connection(directory+slf)
+    cursor = conn.cursor()
+    cursor.execute("SELECT scope, ts, asn, hege FROM hegemony ORDER BY scope")
+
+    for scope, ts, asn, hege in cursor.fetchall():
+        data[scope][ts][asn] = hege
+
+    # Push data to PostgreSQL
+    dt = slf.partition("_")[2]
+    dt = dt.partition(" ")[0]
+    ye, mo, da = dt.split("-")
+    starttime = datetime(int(ye), int(mo), int(da))
+
+    saverQueue = mpQueue(1000)
+    saver = saverPostgresql(starttime, af, saverQueue)
+
+    saverQueue.put("BEGIN TRANSACTION;")
+    for scope, allts in data.iteritems():
+        for ts, hege in allts.iteritems():
+            saverQueue.put(("hegemony", (ts, scope, hege)) )
+    saverQueue.put("COMMIT;")
+
+
 
