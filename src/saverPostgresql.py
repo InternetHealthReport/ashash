@@ -102,7 +102,7 @@ if __name__ == "__main__":
 
     logging.basicConfig(level=logging.DEBUG)
 
-    af = 6
+    af = int(sys.argv[1])
     directory="newResults%s/" % af
     
     for slf in glob.glob(directory+"*.sql"):
