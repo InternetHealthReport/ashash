@@ -71,7 +71,9 @@ class saverSQLite(object):
                 self.prevts = ts
                 logging.debug("start recording hegemony")
             
-            self.cursor.executemany("INSERT INTO hegemony(ts, scope, asn, hege, expid) VALUES (?, ?, ?, ?, ?)", zip([ts]*len(hege), [scope]*len(hege), hege.keys(), hege.values(), [self.expid]*len(hege)) )
+            self.cursor.executemany("INSERT INTO hegemony(ts, scope, asn, hege, expid) VALUES (?, ?, ?, ?, ?)", 
+                    [(ts, scope, k, v, self.expid) for k,v in hege.iteritems() if v!=0 ] )
+                    # zip([ts]*len(hege), [scope]*len(hege), hege.keys(), hege.values(), [self.expid]*len(hege)) )
 
         elif t == "graphchange":
             self.cursor.execute("INSERT INTO graphchange(ts, scope, asn, nbvote, diffhege, expid) VALUES (?, ?, ?, ?, ?, ?)", data+[self.expid])

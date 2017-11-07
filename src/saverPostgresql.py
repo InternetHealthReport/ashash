@@ -85,7 +85,7 @@ class saverPostgresql(object):
                         self.asns.add(int(asn))
                         self.cursor.execute("INSERT INTO ihr_asn(number, name, tartiflette, disco, ashash) select %s, %s, FALSE, FALSE, FALSE WHERE NOT EXISTS ( SELECT number FROM ihr_asn WHERE number = %s); ", (asn, self.asNames["AS"+str(asn)], asn))
             
-            self.cursor.executemany("INSERT INTO ihr_hegemony(timebin, originasn_id, asn_id, hege, af) VALUES (%s, %s, %s, %s, %s)", [(self.starttime, scope, k, v, self.af) for k,v in hege.iteritems() if isinstance(k,int) or not k.startswith("{") ] )
+            self.cursor.executemany("INSERT INTO ihr_hegemony(timebin, originasn_id, asn_id, hege, af) VALUES (%s, %s, %s, %s, %s)", [(self.starttime, scope, k, v, self.af) for k,v in hege.iteritems() if (isinstance(k,int) or not k.startswith("{")) and v!=0 ] )
 
             # elif t == "graphchange":
                 # self.cursor.execute("INSERT INTO graphchange(ts, scope, asn, nbvote, diffhege, expid) VALUES (?, ?, ?, ?, ?, ?)", data+[self.expid])

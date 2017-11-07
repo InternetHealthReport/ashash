@@ -28,9 +28,12 @@ def asHegemonyMetric( param ):
         
         # Adaptively filter low/high betweenness centrality scores
         hege = float(stats.trim_mean(allScores, alpha))
-        # Ignore ASN with hegemony = 0
-        if hege!=0:
-            asHege[asn] = hege
+
+        # This is useful for having a smaller db file, so it should be done
+        # there
+        # # Ignore ASN with hegemony = 0
+        # if hege!=0:
+            # asHege[asn] = hege
 
     return scope, asHege 
 
