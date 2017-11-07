@@ -62,7 +62,6 @@ saverQueue = mpQueue(10000)
 nbGM = 6 
 pipeGM = []
 for i in range(nbGM):
-    # recv, send = 
     pipeGM.append(mpPipe(False))
 
 

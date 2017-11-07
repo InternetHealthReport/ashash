@@ -73,7 +73,8 @@ def longitudinalHegemony():
             1200: "AMSIX", 3356: "Level(3)", 3549:"Global Crossing", 
             174:"Cogent", 2914:"NTT America", 54113:"Fastly", 16509:"Amazon", 
             13335:"Cloudflare", 32934:"Facebook", 13414:"Twitter", 
-            35994:"Akamai", 20940:"Akamai", 15133:"EdgeCast CDN",
+            35994:"Akamai", 20940:"Akamai", 15133:"EdgeCast CDN", 
+            7922:"Comcast",
             # DNS root servers
             26415: "A,J Root", 394353: "B Root", 2149: "C Root", 27: "D Root", 
             21556:"E Root", 3557:"F Root", 5927:"G Root", 1508:"H Root", 
@@ -248,6 +249,7 @@ if __name__ == "__main__":
         json.dump(smallCoeff, open(resultsDirectory+"smallCoeff_%s.json" % ye,"w"))
 
     else:
+        localGraphTransitEvolution(7922, "Comcast", dbList= ["results/Comcast_20171107/results_2017-11-06 16:00:00.sql"])
         # localGraphTransitEvolution(4713, dbList= ["results/GoogleLeak_20170825new/results_@bgpstream:1503615600,1503622801.sql"])
         # root_servers = {26415: "AJ Root", 394353: "B Root", 2149: "C Root", 27: "D Root", 
             # 21556:"E Root",42:"E Root", 3557:"F Root", 5927:"G Root", 1508:"H Root", 

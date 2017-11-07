@@ -32,8 +32,7 @@ def asHegemonyMetric( param ):
         # This is useful for having a smaller db file, so it should be done
         # there
         # # Ignore ASN with hegemony = 0
-        # if hege!=0:
-            # asHege[asn] = hege
+        asHege[asn] = hege
 
     return scope, asHege 
 
