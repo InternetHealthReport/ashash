@@ -225,7 +225,7 @@ class Plotter(object):
 
         return {"all":dataAll, "noZero":dataNoZero}
 
-    def hegemonyEvolutionLocalGraph(self, scope, filename="results/fig/AS%s_hegeEvolution.pdf", fileDate=False):
+    def hegemonyEvolutionLocalGraph(self, scope, filename="results/fig/AS%s_hegeEvolution.pdf", fileDate=False, expid=1):
 
         filename = filename % scope
         hege = defaultdict(lambda: defaultdict(list))
@@ -235,7 +235,7 @@ class Plotter(object):
         fig = plt.figure()
         ax = plt.subplot()
         for cursor_id, cursor in enumerate(self.cursor):
-            data=cursor.execute("SELECT ts, asn, hege  FROM hegemony where expid=1 and hege>0 and scope=%s and asn!=scope order by ts" % (scope))
+            data=cursor.execute("SELECT ts, asn, hege  FROM hegemony where expid=%s and hege>0 and scope=%s and asn!=scope order by ts" % (expid, scope))
             
             for ts, asn, h in data:
                 if ts==0 :

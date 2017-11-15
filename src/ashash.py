@@ -26,6 +26,7 @@ def valid_date(s):
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-a","--af", help="address family (4, 6)", type=int, default=4)
+parser.add_argument("-c","--collector", help="BGP collectors. e.g. route-views.linx rrc00", nargs="+", type=str, default=[ "route-views.linx", "route-views2", "rrc00", "rrc10"])
 parser.add_argument("-N", help="number of hash functions for sketching", type=int, default=16)
 parser.add_argument("-M", help="number of sketches per hash function", type=int, default=128)
 parser.add_argument("-d","--distThresh", help="simhash distance threshold", type=int, default=3)
@@ -72,7 +73,7 @@ for i in range(nbGM):
 
 pc = pathCounter.pathCounter(args.starttime, args.endtime, announceQueue, countQueue,
         ribQueue, spatialResolution=args.spatial, af=args.af, 
-        asnFilter=args.filter, timeWindow=args.window )
+        asnFilter=args.filter, timeWindow=args.window, collectors=args.collector )
 pm = pathMonitor.pathMonitor(hegemonyQueuePM, announceQueue, saverQueue=saverQueue)
 ash = asHegemony.asHegemony(countQueue, hegemonyQueue, saverQueue=saverQueue)
 ag = None

@@ -220,17 +220,17 @@ def localGraphNbnodeDist():
 
         print data["noZero"][15169]
 
-def localGraphTransitEvolution(scope, name, dbList=None, years=[2017]):
+def localGraphTransitEvolution(scope, name, dbList=None, years=[2017], expid=1):
     if dbList is None:
         dbList = []
         for ye in years:
             dbList.extend(listFiles("results", "sql", ye))
         pr = plotter.Plotter(db=dbList)
-        pr.hegemonyEvolutionLocalGraph(scope, fileDate=True)
+        pr.hegemonyEvolutionLocalGraph(scope, fileDate=True, expid=expid)
 
     else:
         pr = plotter.Plotter(db=dbList)
-        pr.hegemonyEvolutionLocalGraph(scope)
+        pr.hegemonyEvolutionLocalGraph(scope, expid=expid)
 
     # plt.title(name+"\n\n")
     # plt.tight_layout()
@@ -249,7 +249,9 @@ if __name__ == "__main__":
         json.dump(smallCoeff, open(resultsDirectory+"smallCoeff_%s.json" % ye,"w"))
 
     else:
-        localGraphTransitEvolution(7922, "Comcast", dbList= ["results/Comcast_20171107/results_2017-11-06 16:00:00.sql"])
+        localGraphTransitEvolution(33491, "Comcast", dbList= ["results/Comcast_20171107/results_2017-11-06 16:00:00.sql"], expid=2)
+        localGraphTransitEvolution(33668, "Comcast", dbList= ["results/Comcast_20171107/results_2017-11-06 16:00:00.sql"], expid=2)
+        localGraphTransitEvolution(577, "Bell Canada", dbList= ["results/Comcast_20171107/results_2017-11-06 16:00:00.sql"], expid=2)
         # localGraphTransitEvolution(4713, dbList= ["results/GoogleLeak_20170825new/results_@bgpstream:1503615600,1503622801.sql"])
         # root_servers = {26415: "AJ Root", 394353: "B Root", 2149: "C Root", 27: "D Root", 
             # 21556:"E Root",42:"E Root", 3557:"F Root", 5927:"G Root", 1508:"H Root", 

@@ -27,8 +27,11 @@ def dt2ts(dt):
 
 class pathCounter(threading.Thread):
 
+    #TODO change asnFilter to prefixFilter
     def __init__(self, starttime, endtime, announceQueue, countQueue, ribQueue, 
-            spatialResolution=1, af=4, timeWindow=900, asnFilter=None ):
+            spatialResolution=1, af=4, timeWindow=900, asnFilter=None, 
+            collectors=[ "route-views.linx", "route-views2", "rrc00", "rrc10"]):
+
         threading.Thread.__init__ (self)
         self.__nbaddr = {4:{i: 2**(32-i) for i in range(33) }, 6: {i: 2**(128-i) for i in range(129) }}
 
@@ -45,6 +48,7 @@ class pathCounter(threading.Thread):
 
         self.rtree = radix.Radix()
 
+        self.collectors = collectors
         self.ts = None
         self.peers = None
         self.peersASN = defaultdict(set) 
@@ -177,10 +181,8 @@ class pathCounter(threading.Thread):
             bgprFilter +=  " and ipversion 4"
 
         # bgprFilter += " and collector rrc10 "
-        bgprFilter += " and collector route-views.linx \
-and collector route-views2 \
-and collector rrc00 \
-and collector rrc10"
+        for c in self.collectors:
+            bgprFilter += " and collector %s " % c
 
         if not self.asnFilter is None:
             bgprFilter += ' and path %s$' % self.asnFilter
@@ -269,10 +271,12 @@ and collector rrc10"
             bgprFilter +=  " and ipversion 4"
 
         # bgprFilter += " and collector rrc10 "
-        bgprFilter += " and collector route-views.linx \
-and collector route-views2 \
-and collector rrc00 \
-and collector rrc10"
+        for c in self.collectors:
+            bgprFilter += " and collector %s " % c
+        # bgprFilter += " and collector route-views.linx \
+# and collector route-views2 \
+# and collector rrc00 \
+# and collector rrc10"
         print bgprFilter
 
         if not self.asnFilter is None:
