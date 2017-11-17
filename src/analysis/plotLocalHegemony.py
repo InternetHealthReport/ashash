@@ -10,7 +10,11 @@ def localGraphTransitEvolution(scope, name, dbList=None, outdir="./", expid=1):
     pr = plotter.Plotter(db=dbList)
     pr.hegemonyEvolutionLocalGraph(scope, expid=expid)
 
-    plt.title(name+"\n\n")
+    if name is None:
+        plt.title("Transits towards AS%s\n\n" % scope)
+    else:
+        plt.title(name+"\n\n")
+
     plt.tight_layout()
     plt.savefig(outdir+"/AS%s_localHegemony.pdf" %  scope)
 
@@ -19,7 +23,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", "--input", help="Folder containing the .sql file produced by ashash", type=str, required=True)
     parser.add_argument("-a", "--asn", help="ASN of the origin AS", type=int, required=True)
-    parser.add_argument("-t", "--title", help="Title for the figure", type=str, default="")
+    parser.add_argument("-t", "--title", help="Title for the figure", type=str, default=None)
     parser.add_argument("-e", "--expid", help="Experiment ID, only needed if your run ashash multiple times", type=int, default=1)
     args = parser.parse_args()
 
