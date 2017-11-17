@@ -56,6 +56,8 @@ class saverSQLite(object):
         if t == "experiment":
             self.cursor.execute("INSERT INTO experiment(date, cmd, args) VALUES (?, ?, ?)", (str(data[0]), data[1], data[2]))
             self.expid = self.conn.last_insert_rowid()
+            if self.expid != 1:
+                logging.warning("Database exists: results will be stored with experiment ID (expid) = %s" % self.expid)
 
         if self.expid is None:
             logging.error("No experiment inserted for this data")

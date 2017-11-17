@@ -190,12 +190,12 @@ class pathCounter(threading.Thread):
         if not self.asnFilter is None:
             bgprFilter += ' and path %s$' % self.asnFilter
         
+        logging.info("Connecting to BGPstream... (%s)" % bgprFilter)
         stream.parse_filter_string(bgprFilter)
         stream.add_interval_filter(self.startts-3600, self.startts+3600)
         if self.livemode:
             stream.set_live_mode()
 
-        logging.info("Connecting to BGPstream... (%s)" % bgprFilter)
         stream.start()
         # for line in p1.stdout: 
         while(stream.get_next_record(rec)):
@@ -285,12 +285,12 @@ class pathCounter(threading.Thread):
             # announcements and withdrawals
             bgprFilter += ' and (path %s$ or elemtype withdrawals)' % self.asnFilter
         
+        logging.info("Connecting to BGPstream... (%s)" % bgprFilter)
         stream.parse_filter_string(bgprFilter)
         stream.add_interval_filter(self.startts, self.endts)
         if self.livemode:
             stream.set_live_mode()
 
-        logging.info("Connecting to BGPstream... (%s)" % bgprFilter)
         stream.start()
         # for line in p1.stdout: 
         # create a reusable bgprecord instance
