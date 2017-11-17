@@ -24,7 +24,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     db = glob.glob(args.input+"/*.sql")
-    print args.input
-    print args.asn
-    print db
     localGraphTransitEvolution(args.asn, args.title, dbList=db, outdir=args.input, expid=args.expid)
