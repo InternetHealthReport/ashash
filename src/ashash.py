@@ -53,13 +53,10 @@ logging.info("Arguments: %s" % args)
 
 # Initialisation
 ribQueue = None
-if args.asGraph:
-    ribQueue = Queue.Queue(5000)
-announceQueue = Queue.Queue(5000)
 countQueue = Queue.Queue(10)
 hegemonyQueue = Queue.Queue(60000)
-hegemonyQueuePM = Queue.Queue(60000)
 saverQueue = mpQueue(10000)
+announceQueue = None
 nbGM = args.N/2 
 pipeGM = []
 for i in range(nbGM):
@@ -67,8 +64,16 @@ for i in range(nbGM):
 
 
 # Analysis Modules
+ag = None
+if args.asGraph:
+    ribQueue = Queue.Queue(5000)
+    ag = asGraph.asGraph(ribQueue)
+
 gm = []
+pm = None
 if nbGM:
+    announceQueue = Queue.Queue(5000)
+    hegemonyQueuePM = Queue.Queue(60000)
     for i in range(nbGM):
         gm.append( Process(target=graphMonitor.graphMonitor, args=(pipeGM[i][0], args.N, args.M, args.distThresh, args.minVoteRatio, saverQueue), name="GM%s" % i ))
     pm = pathMonitor.pathMonitor(hegemonyQueuePM, announceQueue, saverQueue=saverQueue)
@@ -77,9 +82,6 @@ pc = pathCounter.pathCounter(args.starttime, args.endtime, announceQueue, countQ
         ribQueue, spatialResolution=args.spatial, af=args.af, 
         asnFilter=args.filter, timeWindow=args.window, collectors=args.collector )
 ash = asHegemony.asHegemony(countQueue, hegemonyQueue, saverQueue=saverQueue)
-ag = None
-if args.asGraph:
-    ag = asGraph.asGraph(ribQueue)
 
 if args.output == "@psql/":
     logging.info("Pushing results to Postgresql")
@@ -106,7 +108,8 @@ while pc.isAlive() or (not hegemonyQueue.empty()) or (not countQueue.empty()):
         elem = hegemonyQueue.get(timeout=5)
         if firstTime:
             firstTime=False
-            pm.start() # start late to avoid looping unecessarily
+            if pm is not None:
+                pm.start() # start late to avoid looping unecessarily
             logging.debug("writing graph")
             if not ag is None:
                 ag.saveGraph(args.output+"asgraph_%s.txt" % args.starttime)
@@ -121,7 +124,8 @@ while pc.isAlive() or (not hegemonyQueue.empty()) or (not countQueue.empty()):
         pass
 
 logging.debug("Outside the main loop")
-announceQueue.join()
+if announceQueue is not None:
+    announceQueue.join()
 countQueue.join()
 saverQueue.join()
 

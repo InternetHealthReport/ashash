@@ -190,12 +190,12 @@ class pathCounter(threading.Thread):
         if not self.asnFilter is None:
             bgprFilter += ' and path %s$' % self.asnFilter
         
-        logging.info("Reading RIB files... (%s)" % bgprFilter)
         stream.parse_filter_string(bgprFilter)
         stream.add_interval_filter(self.startts-3600, self.startts+3600)
         if self.livemode:
             stream.set_live_mode()
 
+        logging.info("Connecting to BGPstream... (%s)" % bgprFilter)
         stream.start()
         # for line in p1.stdout: 
         while(stream.get_next_record(rec)):
@@ -229,7 +229,7 @@ class pathCounter(threading.Thread):
                     elem = rec.get_next_elem()
                     continue
 
-                if not self.ribQueue is None:
+                if self.ribQueue is not None:
                     self.ribQueue.put( (zDt, zOrig, zAS, zPfx, path ) )
 
                 node.data[zOrig] = {"path": set(path), "count": 0, "origAS":origAS}
@@ -279,9 +279,8 @@ class pathCounter(threading.Thread):
         for c in self.collectors:
             bgprFilter += " and collector %s " % c
 
-        logging.info("Reading UPDATES files... (%s)" % bgprFilter)
 
-        if not self.asnFilter is None:
+        if self.asnFilter is not None:
             # TOFIX filter is now deprecated, we need to have both
             # announcements and withdrawals
             bgprFilter += ' and (path %s$ or elemtype withdrawals)' % self.asnFilter
@@ -291,6 +290,7 @@ class pathCounter(threading.Thread):
         if self.livemode:
             stream.set_live_mode()
 
+        logging.info("Connecting to BGPstream... (%s)" % bgprFilter)
         stream.start()
         # for line in p1.stdout: 
         # create a reusable bgprecord instance
@@ -382,8 +382,9 @@ class pathCounter(threading.Thread):
                         # Ignoring paths with only one AS
                         elem = rec.get_next_elem()
                         continue
-
-                    self.announceQueue.put( (zDt, zOrig, zAS, zPfx, path) )
+                    
+                    if self.announceQueue is not None:
+                        self.announceQueue.put( (zDt, zOrig, zAS, zPfx, path) )
 
                     origAS = path[-1]
 
