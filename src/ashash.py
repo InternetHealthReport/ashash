@@ -27,7 +27,7 @@ def valid_date(s):
 parser = argparse.ArgumentParser()
 parser.add_argument("-a","--af", help="address family (4, 6)", type=int, default=4)
 parser.add_argument("-c","--collector", help="BGP collectors. e.g. route-views.linx rrc00", nargs="+", type=str, default=[ "route-views.linx", "route-views2", "rrc00", "rrc10"])
-parser.add_argument("-N", help="number of hash functions for sketching", type=int, default=16)
+parser.add_argument("-N", help="number of hash functions for sketching", type=int, default=0) #16
 parser.add_argument("-M", help="number of sketches per hash function", type=int, default=128)
 parser.add_argument("-d","--distThresh", help="simhash distance threshold", type=int, default=3)
 parser.add_argument("-f","--filter", help="filter per origin AS (Deprecated, will be removed soon)", type=str, default=None)
@@ -60,7 +60,7 @@ countQueue = Queue.Queue(10)
 hegemonyQueue = Queue.Queue(60000)
 hegemonyQueuePM = Queue.Queue(60000)
 saverQueue = mpQueue(10000)
-nbGM = 6 
+nbGM = args.N/2 
 pipeGM = []
 for i in range(nbGM):
     pipeGM.append(mpPipe(False))
@@ -68,13 +68,14 @@ for i in range(nbGM):
 
 # Analysis Modules
 gm = []
-for i in range(nbGM):
-    gm.append( Process(target=graphMonitor.graphMonitor, args=(pipeGM[i][0], args.N, args.M, args.distThresh, args.minVoteRatio, saverQueue), name="GM%s" % i ))
+if nbGM:
+    for i in range(nbGM):
+        gm.append( Process(target=graphMonitor.graphMonitor, args=(pipeGM[i][0], args.N, args.M, args.distThresh, args.minVoteRatio, saverQueue), name="GM%s" % i ))
+    pm = pathMonitor.pathMonitor(hegemonyQueuePM, announceQueue, saverQueue=saverQueue)
 
 pc = pathCounter.pathCounter(args.starttime, args.endtime, announceQueue, countQueue,
         ribQueue, spatialResolution=args.spatial, af=args.af, 
         asnFilter=args.filter, timeWindow=args.window, collectors=args.collector )
-pm = pathMonitor.pathMonitor(hegemonyQueuePM, announceQueue, saverQueue=saverQueue)
 ash = asHegemony.asHegemony(countQueue, hegemonyQueue, saverQueue=saverQueue)
 ag = None
 if args.asGraph:
@@ -110,11 +111,12 @@ while pc.isAlive() or (not hegemonyQueue.empty()) or (not countQueue.empty()):
             if not ag is None:
                 ag.saveGraph(args.output+"asgraph_%s.txt" % args.starttime)
         # logging.debug("(main) dispatching hegemony %s" % elem[1])
-        if elem[1] == "all":
-            pipeGM[0][1].send( elem )
-        else:
-            pipeGM[int(elem[1])%nbGM][1].send( elem )
-            hegemonyQueuePM.put( elem )
+        if nbGM:
+            if elem[1] == "all":
+                pipeGM[0][1].send( elem )
+            else:
+                pipeGM[int(elem[1])%nbGM][1].send( elem )
+                hegemonyQueuePM.put( elem )
     except Queue.Empty:
         pass
 

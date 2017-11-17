@@ -37,6 +37,9 @@ class pathCounter(threading.Thread):
 
         self.startts = int(dt2ts(starttime))
         self.endts = int(dt2ts(endtime))
+        self.livemode = False
+        if endtime > datetime.utcnow():
+            self.livemode = True
         self.announceQueue = announceQueue
         self.countQueue = countQueue
         self.ribQueue = ribQueue
@@ -187,9 +190,11 @@ class pathCounter(threading.Thread):
         if not self.asnFilter is None:
             bgprFilter += ' and path %s$' % self.asnFilter
         
-        print bgprFilter
+        logging.info("Reading RIB files... (%s)" % bgprFilter)
         stream.parse_filter_string(bgprFilter)
         stream.add_interval_filter(self.startts-3600, self.startts+3600)
+        if self.livemode:
+            stream.set_live_mode()
 
         stream.start()
         # for line in p1.stdout: 
@@ -273,11 +278,8 @@ class pathCounter(threading.Thread):
         # bgprFilter += " and collector rrc10 "
         for c in self.collectors:
             bgprFilter += " and collector %s " % c
-        # bgprFilter += " and collector route-views.linx \
-# and collector route-views2 \
-# and collector rrc00 \
-# and collector rrc10"
-        print bgprFilter
+
+        logging.info("Reading UPDATES files... (%s)" % bgprFilter)
 
         if not self.asnFilter is None:
             # TOFIX filter is now deprecated, we need to have both
@@ -286,6 +288,8 @@ class pathCounter(threading.Thread):
         
         stream.parse_filter_string(bgprFilter)
         stream.add_interval_filter(self.startts, self.endts)
+        if self.livemode:
+            stream.set_live_mode()
 
         stream.start()
         # for line in p1.stdout: 
