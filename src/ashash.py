@@ -16,6 +16,7 @@ import pathMonitor
 import graphMonitor
 import saverSQLite
 import asGraph
+import outlierDetection
 
 def valid_date(s):
     try:
@@ -32,6 +33,7 @@ parser.add_argument("-M", help="number of sketches per hash function", type=int,
 parser.add_argument("-d","--distThresh", help="simhash distance threshold", type=int, default=3)
 parser.add_argument("-f","--filter", help="filter per origin AS (Deprecated, will be removed soon)", type=str, default=None)
 parser.add_argument("-g","--asGraph", help="dump the global AS graph", action="store_true")
+parser.add_argument("-p","--postgre", help="send results to postgreSQL", action="store_true")
 parser.add_argument("-r","--minVoteRatio", help="Minimum ratio of sketches to detect anomalies (should be between 0 and 1)", type=float, default=0.5)
 parser.add_argument("-s", "--spatial", help="spatial resolution (0 for prefix, 1 for address)", type=int, default=1)
 parser.add_argument("-w", "--window", help="Time window: time resolution in seconds", type=int, default=900)
@@ -78,24 +80,35 @@ if nbGM:
         gm.append( Process(target=graphMonitor.graphMonitor, args=(pipeGM[i][0], args.N, args.M, args.distThresh, args.minVoteRatio, saverQueue), name="GM%s" % i ))
     pm = pathMonitor.pathMonitor(hegemonyQueuePM, announceQueue, saverQueue=saverQueue)
 
+outlierDetection = False
+if outlierDetection:
+    pipeOD = mpPipe(False)
+    od = Process(target=outlierDetection.outlierDetection, args=(pipeOD[0], 3.0, 5), name="OD")
+
 pc = pathCounter.pathCounter(args.starttime, args.endtime, announceQueue, countQueue,
         ribQueue, spatialResolution=args.spatial, af=args.af, 
         asnFilter=args.filter, timeWindow=args.window, collectors=args.collector )
 ash = asHegemony.asHegemony(countQueue, hegemonyQueue, saverQueue=saverQueue)
 
-if args.output == "@psql/":
-    logging.info("Pushing results to Postgresql")
+saverQueuePostgre = None
+if args.postgre:
+    logging.info("Will push results to Postgresql")
     import saverPostgresql
-    ss = Process(target=saverPostgresql.saverPostgresql, args=(args.starttime, args.af, saverQueue), name="saverPostgresql")
-    ss.start()
-else:
-    sqldb = args.output+"results_%s.sql" % args.starttime
-    ss = Process(target=saverSQLite.saverSQLite, args=(sqldb, saverQueue), name="saverSQLite")
-    ss.start()
-    saverQueue.put(("experiment", [datetime.now(), str(sys.argv), str(args)]))
+    saverQueuePostgre = mpQueue(10000)
+    sp = Process(target=saverPostgresql.saverPostgresql, args=(args.starttime, args.af, saverQueuePostgre), name="saverPostgresql")
+    sp.start()
+
+sqldb = args.output+"results_%s.sql" % args.starttime
+ss = Process(target=saverSQLite.saverSQLite, args=(sqldb, saverQueue, saverQueuePostgre), name="saverSQLite")
+ss.start()
+saverQueue.put(("experiment", [datetime.now(), str(sys.argv), str(args)]))
 
 for g in gm: 
     g.start();
+
+if outlierDetection:
+    od.start()
+
 if not ag is None:
     ag.start()
 ash.start()
@@ -110,8 +123,8 @@ while pc.isAlive() or (not hegemonyQueue.empty()) or (not countQueue.empty()):
             firstTime=False
             if pm is not None:
                 pm.start() # start late to avoid looping unecessarily
-            logging.debug("writing graph")
-            if not ag is None:
+            if ag is not None:
+                logging.debug("writing graph")
                 ag.saveGraph(args.output+"asgraph_%s.txt" % args.starttime)
         # logging.debug("(main) dispatching hegemony %s" % elem[1])
         if nbGM:
@@ -120,6 +133,9 @@ while pc.isAlive() or (not hegemonyQueue.empty()) or (not countQueue.empty()):
             else:
                 pipeGM[int(elem[1])%nbGM][1].send( elem )
                 hegemonyQueuePM.put( elem )
+        if outlierDetection:
+            pipeOD[1].send( elem )
+
     except Queue.Empty:
         pass
 
@@ -127,7 +143,14 @@ logging.debug("Outside the main loop")
 if announceQueue is not None:
     announceQueue.join()
 countQueue.join()
+logging.debug("Waiting for saver module")
 saverQueue.join()
+
+if saverQueuePostgre is not None:
+    logging.debug("Waiting for PostgreSQL")
+    saverQueuePostgre.join()
+    sp.terminate()
+
 
 logging.debug("Killing child processes")
 ss.terminate()

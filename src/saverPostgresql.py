@@ -1,5 +1,6 @@
 import sys
 import psycopg2
+import psycopg2.extras
 import logging
 from collections import defaultdict
 import json
@@ -8,6 +9,7 @@ import glob
 from datetime import datetime
 from multiprocessing import JoinableQueue as mpQueue
 from multiprocessing import Process
+from StringIO import StringIO
 
 #TODO make the timebin value function of what is passed in ts
 
@@ -24,6 +26,7 @@ class saverPostgresql(object):
         self.asNames = defaultdict(str, json.load(open("data/asNames.json")))
         self.starttime = starttime
         self.af = af
+        self.dataHege = "" 
 
         local_port = 5432
         if host != "localhost" and host!="127.0.0.1":
@@ -45,7 +48,7 @@ class saverPostgresql(object):
         logging.debug("Connected to the PostgreSQL server")
 
         self.cursor.execute("SELECT number FROM ihr_asn WHERE ashash=TRUE")
-        self.asns = set(self.cursor.fetchall())
+        self.asns = set([x[0] for x in self.cursor.fetchall()])
         logging.debug("%s ASNS already registered in the database" % len(self.asns))
 
         self.run()
@@ -55,7 +58,12 @@ class saverPostgresql(object):
         while True:
             elem = self.saverQueue.get()
             if isinstance(elem, str) and elem.endswith(";"):
-                self.cursor.execute(elem)
+                if elem=="COMMIT;":
+                    logging.warn("psql: start commit")
+                    self.commit()
+                # self.cursor.execute(elem)
+                logging.warn("psql: end commit")
+                # pass
             else:
                 self.save(elem)
             self.saverQueue.task_done()
@@ -73,26 +81,54 @@ class saverPostgresql(object):
 
             if int(scope) not in self.asns:
                 self.asns.add(int(scope))
-                self.cursor.execute("""do $$
-                    begin 
-                        insert into ihr_asn(number, name, tartiflette, disco, ashash) values(%s, %s, FALSE, FALSE, TRUE);
-                    exception when unique_violation then
-                        update ihr_asn set ashash = TRUE where number = %s;
-                    end $$;""", (scope, self.asNames["AS"+str(scope)], scope))
+                logging.warn("psql: add new scope %s" % scope)
+                self.cursor.execute("INSERT INTO ihr_asn(number, name, tartiflette, disco, ashash) select %s, %s, FALSE, FALSE, TRUE WHERE NOT EXISTS ( SELECT number FROM ihr_asn WHERE number = %s)", (scope, self.asNames["AS"+str(scope)], scope))
+                self.cursor.execute("UPDATE ihr_asn SET ashash = TRUE where number = %s", (int(scope),))
+                        # ;
+                # self.cursor.execute("""do $$
+                    # begin 
+                        # insert into ihr_asn(number, name, tartiflette, disco, ashash) values(%s, %s, FALSE, FALSE, TRUE);
+                    # exception when unique_violation then
+                        # update ihr_asn set ashash = TRUE where number = %s;
+                    # end $$;""", (scope, self.asNames["AS"+str(scope)], scope))
 
-            for asn in hege.keys():
-                if  isinstance(asn, int) or not asn.startswith("{"):
-                    if int(asn) not in self.asns :
-                        self.asns.add(int(asn))
-                        self.cursor.execute("INSERT INTO ihr_asn(number, name, tartiflette, disco, ashash) select %s, %s, FALSE, FALSE, FALSE WHERE NOT EXISTS ( SELECT number FROM ihr_asn WHERE number = %s); ", (asn, self.asNames["AS"+str(asn)], asn))
+            insertQuery = "INSERT INTO ihr_asn(number, name, tartiflette, disco, ashash) select %s, %s, FALSE, FALSE, TRUE WHERE NOT EXISTS ( SELECT number FROM ihr_asn WHERE number = %s)"
+            param = [(asn, self.asNames["AS"+str(asn)], asn) for asn in hege.keys() if  (isinstance(asn, int) or not asn.startswith("{") ) and int(asn) not in self.asns]
+            #toremove
+            for asn, _, _ in param:
+                self.asns.add(int(asn))
+                self.cursor.execute("UPDATE ihr_asn SET ashash = TRUE where number = %s", (int(asn),))
+            if len(param)>0:
+                # logging.warn("psql: param %s" % (param,))
+                psycopg2.extras.execute_batch(self.cursor, insertQuery, param, page_size=100)
+            # for asn in hege.keys():
+                # if  isinstance(asn, int) or not asn.startswith("{"):
+                    # if int(asn) not in self.asns :
+                        # self.cursor.execute("INSERT INTO ihr_asn(number, name, tartiflette, disco, ashash) select %s, %s, FALSE, FALSE, FALSE WHERE NOT EXISTS ( SELECT number FROM ihr_asn WHERE number = %s)", (asn, self.asNames["AS"+str(asn)], asn))
             
-            self.cursor.executemany("INSERT INTO ihr_hegemony(timebin, originasn_id, asn_id, hege, af) VALUES (%s, %s, %s, %s, %s)", [(self.starttime, scope, k, v, self.af) for k,v in hege.iteritems() if (isinstance(k,int) or not k.startswith("{")) and v!=0 ] )
+            # self.dataHege.extend([(self.starttime, scope, k, v, self.af) for k,v in hege.iteritems() if (isinstance(k,int) or not k.startswith("{")) and v!=0 ])
+            for timebin, originasn, asn, hege, af in [(self.starttime, scope, k, v, self.af) for k,v in hege.iteritems() if (isinstance(k,int) or not k.startswith("{")) and v!=0 ]:
+                self.dataHege += "%s\t%s\t%s\t%s\t%s\n" % (timebin, hege, asn, originasn, af)
+            if len(self.dataHege) > 1000000:
+                self.commit()
+                # insertQuery = "INSERT INTO ihr_hegemony(timebin, originasn_id, asn_id, hege, af) VALUES %s"
+                # psycopg2.extras.execute_values(self.cursor, insertQuery, param, template=None, page_size=100) 
+            # self.cursor.executemany("INSERT INTO ihr_hegemony(timebin, originasn_id, asn_id, hege, af) VALUES (%s, %s, %s, %s, %s)", [(self.starttime, scope, k, v, self.af) for k,v in hege.iteritems() if (isinstance(k,int) or not k.startswith("{")) and v!=0 ] )
 
             # elif t == "graphchange":
                 # self.cursor.execute("INSERT INTO graphchange(ts, scope, asn, nbvote, diffhege, expid) VALUES (?, ?, ?, ?, ?, ?)", data+[self.expid])
 
             # elif t == "anomalouspath":
                 # self.cursor.execute("INSERT INTO anomalouspath(ts, path, origas, anoasn, hegepath, score, expid) VALUES (?, ?, ?, ?, ?, ?, ?)", data+[self.expid])
+
+    def commit(self):
+        logging.warn("psql: start push")
+        # insertQuery = "INSERT INTO ihr_hegemony(timebin, originasn_id, asn_id, hege, af) VALUES %s"
+        # psycopg2.extras.execute_values(self.cursor, insertQuery, self.dataHege, template=None, page_size=100000) 
+        self.cursor.copy_from(StringIO(self.dataHege), "ihr_hegemony", columns=("timebin", "hege", "asn_id", "originasn_id", "af"))
+        self.conn.commit()
+        self.dataHege=""
+        logging.warn("psql: end push")
 
 
 if __name__ == "__main__":

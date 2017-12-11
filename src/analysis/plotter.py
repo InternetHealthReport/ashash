@@ -256,9 +256,9 @@ class Plotter(object):
         # plt.xlabel("Time")
         plt.ylim([0.0, 1.05])
         plt.legend(loc='upper center', ncol=4, bbox_to_anchor=(0.5, 1.2), fontsize=8 )
-        if len(self.dbfiles)==1:
-            myFmt = mdates.DateFormatter('%H:%M')
-            ax.xaxis.set_major_formatter(myFmt)
+        # if len(self.dbfiles)==1:
+            # myFmt = mdates.DateFormatter('%H:%M')
+            # ax.xaxis.set_major_formatter(myFmt)
         fig.autofmt_xdate() 
         # plt.tight_layout()
         plt.savefig(filename)

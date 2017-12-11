@@ -15,9 +15,10 @@ import json
 import sys
 
 
-resultsDirectory = "resultsv4/"
+# resultsDirectory = "resultsv4/"
 # resultsDirectory = "results/"
 # resultsDirectory = "resultsv6/"
+resultsDirectory = "newResults6/"
 
 def listFiles(prefix, suffix, ye, months = range(1,13), days = [15] ):
 
@@ -249,18 +250,18 @@ if __name__ == "__main__":
         json.dump(smallCoeff, open(resultsDirectory+"smallCoeff_%s.json" % ye,"w"))
 
     else:
-        localGraphTransitEvolution(33491, "Comcast", dbList= ["results/Comcast_20171107/results_2017-11-06 16:00:00.sql"], expid=2)
-        localGraphTransitEvolution(33668, "Comcast", dbList= ["results/Comcast_20171107/results_2017-11-06 16:00:00.sql"], expid=2)
-        localGraphTransitEvolution(577, "Bell Canada", dbList= ["results/Comcast_20171107/results_2017-11-06 16:00:00.sql"], expid=2)
+        # localGraphTransitEvolution(33491, "Comcast", dbList= ["results/Comcast_20171107/results_2017-11-06 16:00:00.sql"], expid=2)
+        # localGraphTransitEvolution(33668, "Comcast", dbList= ["results/Comcast_20171107/results_2017-11-06 16:00:00.sql"], expid=2)
+        # localGraphTransitEvolution(577, "Bell Canada", dbList= ["results/Comcast_20171107/results_2017-11-06 16:00:00.sql"], expid=2)
         # localGraphTransitEvolution(4713, dbList= ["results/GoogleLeak_20170825new/results_@bgpstream:1503615600,1503622801.sql"])
-        # root_servers = {26415: "AJ Root", 394353: "B Root", 2149: "C Root", 27: "D Root", 
-            # 21556:"E Root",42:"E Root", 3557:"F Root", 5927:"G Root", 1508:"H Root", 
-            # 29216:"I Root", 25152:"K Root", 20144:"L Root", 7500:"M Root"}
-        # for asn, name in root_servers.iteritems(): 
-            # localGraphTransitEvolution(asn, name)
+        root_servers = {26415: "AJ Root", 394353: "B Root", 2149: "C Root", 27: "D Root", 
+            21556:"E Root",42:"E Root", 3557:"F Root", 5927:"G Root", 1508:"H Root", 
+            29216:"I Root", 25152:"K Root", 20144:"L Root", 7500:"M Root"}
+        for asn, name in root_servers.iteritems(): 
+            localGraphTransitEvolution(asn, name)
         # localGraphTransitEvolution(25152, years=range(2004,2018))
         # localGraphNbnodeDist()
-        longitudinalHegemony()
+        # longitudinalHegemony()
 
 
 

@@ -6,12 +6,13 @@ class saverSQLite(object):
 
     """Dumps variables to a SQLite database. """
 
-    def __init__(self, filename, saverQueue):
+    def __init__(self, filename, saverQueue, saverChain):
        
         self.filename = filename
         self.conn = apsw.Connection(filename)
         self.cursor = self.conn.cursor()
         self.saverQueue = saverQueue
+        self.saverChain = saverChain
         self.expid = None
         self.prevts = -1
 
@@ -23,6 +24,8 @@ class saverSQLite(object):
         
         while True:
             elem = self.saverQueue.get()
+            if self.saverChain is not None:
+                self.saverChain.put(elem)
             if isinstance(elem, str) and elem.endswith(";"):
                 self.cursor.execute(elem)
             else:
