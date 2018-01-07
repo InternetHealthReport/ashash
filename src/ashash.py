@@ -27,6 +27,7 @@ def valid_date(s):
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-a","--af", help="address family (4, 6)", type=int, default=4)
+parser.add_argument("alpha", help="Alpha values for AS hegemony", type=float, default=0.1)
 parser.add_argument("-c","--collector", help="BGP collectors. e.g. route-views.linx rrc00", nargs="+", type=str, default=[ "route-views.linx", "route-views2", "rrc00", "rrc10"])
 parser.add_argument("-N", help="number of hash functions for sketching", type=int, default=0) #16
 parser.add_argument("-M", help="number of sketches per hash function", type=int, default=128)
@@ -88,7 +89,7 @@ if outlierDetection:
 pc = pathCounter.pathCounter(args.starttime, args.endtime, announceQueue, countQueue,
         ribQueue, spatialResolution=args.spatial, af=args.af, 
         asnFilter=args.filter, timeWindow=args.window, collectors=args.collector )
-ash = asHegemony.asHegemony(countQueue, hegemonyQueue, saverQueue=saverQueue)
+ash = asHegemony.asHegemony(countQueue, hegemonyQueue, alpha=args.alpha, saverQueue=saverQueue)
 
 saverQueuePostgre = None
 if args.postgre:
