@@ -28,5 +28,10 @@ for p in peersSet:
 if asOrigin in G:
     G.node[asOrigin]["color"] = "#FF0000"
 
+# TODO add hegemony score 
+
+# TODO add non-full feed peers?
+
+
 # Write the graph in gml format
 nx.write_gml(G, filename+".gml")

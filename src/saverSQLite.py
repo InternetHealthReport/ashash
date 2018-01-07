@@ -6,12 +6,13 @@ class saverSQLite(object):
 
     """Dumps variables to a SQLite database. """
 
-    def __init__(self, filename, saverQueue):
+    def __init__(self, filename, saverQueue, saverChain):
        
         self.filename = filename
         self.conn = apsw.Connection(filename)
         self.cursor = self.conn.cursor()
         self.saverQueue = saverQueue
+        self.saverChain = saverChain
         self.expid = None
         self.prevts = -1
 
@@ -23,6 +24,8 @@ class saverSQLite(object):
         
         while True:
             elem = self.saverQueue.get()
+            if self.saverChain is not None:
+                self.saverChain.put(elem)
             if isinstance(elem, str) and elem.endswith(";"):
                 self.cursor.execute(elem)
             else:
@@ -56,6 +59,8 @@ class saverSQLite(object):
         if t == "experiment":
             self.cursor.execute("INSERT INTO experiment(date, cmd, args) VALUES (?, ?, ?)", (str(data[0]), data[1], data[2]))
             self.expid = self.conn.last_insert_rowid()
+            if self.expid != 1:
+                logging.warning("Database exists: results will be stored with experiment ID (expid) = %s" % self.expid)
 
         if self.expid is None:
             logging.error("No experiment inserted for this data")
@@ -71,7 +76,8 @@ class saverSQLite(object):
                 self.prevts = ts
                 logging.debug("start recording hegemony")
             
-            self.cursor.executemany("INSERT INTO hegemony(ts, scope, asn, hege, expid) VALUES (?, ?, ?, ?, ?)", zip([ts]*len(hege), [scope]*len(hege), hege.keys(), hege.values(), [self.expid]*len(hege)) )
+            self.cursor.executemany("INSERT INTO hegemony(ts, scope, asn, hege, expid) VALUES (?, ?, ?, ?, ?)", [(ts, scope, k, v, self.expid) for k,v in hege.iteritems() if v!=0 ] )
+                    # zip([ts]*len(hege), [scope]*len(hege), hege.keys(), hege.values(), [self.expid]*len(hege)) )
 
         elif t == "graphchange":
             self.cursor.execute("INSERT INTO graphchange(ts, scope, asn, nbvote, diffhege, expid) VALUES (?, ?, ?, ?, ?, ?)", data+[self.expid])

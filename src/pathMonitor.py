@@ -43,7 +43,7 @@ class pathMonitor(threading.Thread):
     #TODO: clean this function
     #TODO: check if the hegemony scores are not too old..
         # zTd, zDt, zS, zOrig, zAS, zPfx, path, zPro, zOr, z0, z1, z2, z3, z4, z5 = msg
-        path = list(unique_justseen(msg[6].split(" ")))
+        path = list(unique_justseen(msg[4]))
         origas = path[-1]
 
         if not origas in self.hegemony:
