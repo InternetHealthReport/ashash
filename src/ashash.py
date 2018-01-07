@@ -16,7 +16,7 @@ import pathMonitor
 import graphMonitor
 import saverSQLite
 import asGraph
-import outlierDetection
+# import outlierDetection
 
 def valid_date(s):
     try:
