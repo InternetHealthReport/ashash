@@ -15,3 +15,4 @@ for alpha in alphaValues:
     cmd = 'python2 src/ashash.py --alpha %s -c route-views3 -o %s %s %s' % (alpha, outputDirectory, dateStr, dateStr )
     print(cmd)
     os.system(cmd)
+
