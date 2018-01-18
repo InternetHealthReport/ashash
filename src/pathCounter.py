@@ -81,8 +81,7 @@ class pathCounter(threading.Thread):
         if self.startts != self.endts:
             self.readupdates()
         else:
-            self.ts = 0
-            self.slideTimeWindow(1)
+            self.slideTimeWindow(0)
 
         logging.info("(pathCounter) Finished to read data")
 
@@ -145,10 +144,10 @@ class pathCounter(threading.Thread):
 
     def slideTimeWindow(self,ts):
         logging.debug("(pathCounter) sliding window... (ts=%s)" % self.ts)
-        
+        self.ts = ts
+
         self.countQueue.put( (self.ts, self.peersPerASN, self.counter) )
         self.countQueue.join()
-        self.ts = ts
         
         logging.debug("(pathCounter) window slided (ts=%s)" % self.ts)
 
@@ -316,7 +315,6 @@ class pathCounter(threading.Thread):
                 msgTs = zDt
                 # set first time bin!
                 if self.ts is None:
-                    self.ts = 0
                     self.slideTimeWindow(msgTs)
             
                 elif self.ts + self.timeWindow <= msgTs:

@@ -243,7 +243,7 @@ class Plotter(object):
                         ts = int(self.dbfiles[cursor_id].rpartition(",")[2].partition(".")[0])
                     else:
                         continue
-                xval = datetime.utcfromtimestamp(ts+900)
+                xval = datetime.utcfromtimestamp(ts)
                 hege[asn]["ts"].append(xval)
                 hege[asn]["hege"].append(h)
 

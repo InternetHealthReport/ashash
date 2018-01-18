@@ -22,9 +22,9 @@ class saverPostgresql(object):
 
         self.saverQueue = saverQueue
         self.expid = None
-        self.prevts = -1
+        self.prevts = 0 
         self.asNames = defaultdict(str, json.load(open("data/asNames.json")))
-        self.starttime = starttime
+        self.currenttime = starttime
         self.af = af
         self.dataHege = "" 
 
@@ -32,7 +32,7 @@ class saverPostgresql(object):
         if host != "localhost" and host!="127.0.0.1":
             from sshtunnel import SSHTunnelForwarder
             self.server = SSHTunnelForwarder(
-                'romain.iijlab.net',
+                host,
                 ssh_username="romain",
                 ssh_private_key="/home/romain/.ssh/id_rsa",
                 remote_bind_address=('127.0.0.1', 5432),
@@ -42,7 +42,10 @@ class saverPostgresql(object):
             logging.debug("SSH tunnel opened")
             local_port = str(self.server.local_bind_port)
 
-        conn_string = "host='127.0.0.1' port='%s' dbname='%s'" % (local_port, dbname)
+            conn_string = "host='127.0.0.1' port='%s' dbname='%s'" % (local_port, dbname)
+        else:
+            conn_string = "dbname='%s'" % dbname
+
         self.conn = psycopg2.connect(conn_string)
         self.cursor = self.conn.cursor()
         logging.debug("Connected to the PostgreSQL server")
@@ -77,6 +80,7 @@ class saverPostgresql(object):
 
             if self.prevts != ts:
                 self.prevts = ts
+                self.currenttime = datetime.utcfromtimestamp(ts)
                 logging.debug("start recording hegemony")
 
             if int(scope) not in self.asns:
@@ -107,7 +111,7 @@ class saverPostgresql(object):
                         # self.cursor.execute("INSERT INTO ihr_asn(number, name, tartiflette, disco, ashash) select %s, %s, FALSE, FALSE, FALSE WHERE NOT EXISTS ( SELECT number FROM ihr_asn WHERE number = %s)", (asn, self.asNames["AS"+str(asn)], asn))
             
             # self.dataHege.extend([(self.starttime, scope, k, v, self.af) for k,v in hege.iteritems() if (isinstance(k,int) or not k.startswith("{")) and v!=0 ])
-            for timebin, originasn, asn, hege, af in [(self.starttime, scope, k, v, self.af) for k,v in hege.iteritems() if (isinstance(k,int) or not k.startswith("{")) and v!=0 ]:
+            for timebin, originasn, asn, hege, af in [(self.currenttime, scope, k, v, self.af) for k,v in hege.iteritems() if (isinstance(k,int) or not k.startswith("{")) and v!=0 ]:
                 self.dataHege += "%s\t%s\t%s\t%s\t%s\n" % (timebin, hege, asn, originasn, af)
             if len(self.dataHege) > 1000000:
                 self.commit()
