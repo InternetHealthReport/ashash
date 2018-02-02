@@ -1,6 +1,7 @@
 import sys
 import psycopg2
-import psycopg2.extras
+from pgcopy import CopyManager
+from io import BytesIO
 import logging
 from collections import defaultdict
 import json
@@ -26,7 +27,8 @@ class saverPostgresql(object):
         self.asNames = defaultdict(str, json.load(open("data/asNames.json")))
         self.currenttime = starttime
         self.af = af
-        self.dataHege = "" 
+        self.dataHege = [] 
+        self.cpmgr = None
 
         local_port = 5432
         if host != "localhost" and host!="127.0.0.1":
@@ -47,6 +49,8 @@ class saverPostgresql(object):
             conn_string = "dbname='%s'" % dbname
 
         self.conn = psycopg2.connect(conn_string)
+        columns=("timebin", "hege", "asn_id", "originasn_id", "af")
+        self.cpmgr = CopyManager(self.conn, 'ihr_hegemony', columns)
         self.cursor = self.conn.cursor()
         logging.debug("Connected to the PostgreSQL server")
 
@@ -65,7 +69,7 @@ class saverPostgresql(object):
                     logging.warn("psql: start commit")
                     self.commit()
                 # self.cursor.execute(elem)
-                logging.warn("psql: end commit")
+                    logging.warn("psql: end commit")
                 # pass
             else:
                 self.save(elem)
@@ -110,11 +114,11 @@ class saverPostgresql(object):
                     # if int(asn) not in self.asns :
                         # self.cursor.execute("INSERT INTO ihr_asn(number, name, tartiflette, disco, ashash) select %s, %s, FALSE, FALSE, FALSE WHERE NOT EXISTS ( SELECT number FROM ihr_asn WHERE number = %s)", (asn, self.asNames["AS"+str(asn)], asn))
             
-            # self.dataHege.extend([(self.starttime, scope, k, v, self.af) for k,v in hege.iteritems() if (isinstance(k,int) or not k.startswith("{")) and v!=0 ])
-            for timebin, originasn, asn, hege, af in [(self.currenttime, scope, k, v, self.af) for k,v in hege.iteritems() if (isinstance(k,int) or not k.startswith("{")) and v!=0 ]:
-                self.dataHege += "%s\t%s\t%s\t%s\t%s\n" % (timebin, hege, asn, originasn, af)
-            if len(self.dataHege) > 1000000:
-                self.commit()
+            self.dataHege.extend([(self.currenttime, scope, k, v, self.af) for k,v in hege.iteritems() if (isinstance(k,int) or not k.startswith("{")) and v!=0 ])
+            # for timebin, originasn, asn, hege, af in [(self.currenttime, scope, k, v, self.af) for k,v in hege.iteritems() if (isinstance(k,int) or not k.startswith("{")) and v!=0 ]:
+                # self.dataHege += "%s\t%s\t%s\t%s\t%s\n" % (timebin, hege, asn, originasn, af)
+            # if len(self.dataHege) > 1000000:
+                # self.commit()
                 # insertQuery = "INSERT INTO ihr_hegemony(timebin, originasn_id, asn_id, hege, af) VALUES %s"
                 # psycopg2.extras.execute_values(self.cursor, insertQuery, param, template=None, page_size=100) 
             # self.cursor.executemany("INSERT INTO ihr_hegemony(timebin, originasn_id, asn_id, hege, af) VALUES (%s, %s, %s, %s, %s)", [(self.starttime, scope, k, v, self.af) for k,v in hege.iteritems() if (isinstance(k,int) or not k.startswith("{")) and v!=0 ] )
@@ -126,13 +130,13 @@ class saverPostgresql(object):
                 # self.cursor.execute("INSERT INTO anomalouspath(ts, path, origas, anoasn, hegepath, score, expid) VALUES (?, ?, ?, ?, ?, ?, ?)", data+[self.expid])
 
     def commit(self):
-        logging.warn("psql: start push")
+        logging.warn("psql: start copy")
         # insertQuery = "INSERT INTO ihr_hegemony(timebin, originasn_id, asn_id, hege, af) VALUES %s"
         # psycopg2.extras.execute_values(self.cursor, insertQuery, self.dataHege, template=None, page_size=100000) 
-        self.cursor.copy_from(StringIO(self.dataHege), "ihr_hegemony", columns=("timebin", "hege", "asn_id", "originasn_id", "af"))
+        self.cpmgr.copy(self.dataHege, BytesIO)
         self.conn.commit()
-        self.dataHege=""
-        logging.warn("psql: end push")
+        self.dataHege = []
+        logging.warn("psql: end copy")
 
 
 if __name__ == "__main__":
@@ -168,11 +172,11 @@ if __name__ == "__main__":
         ss = Process(target=saverPostgresql, args=(starttime, af, saverQueue), name="saverPostgresql")
         ss.start()
 
-        saverQueue.put("BEGIN TRANSACTION;")
+        # saverQueue.put("BEGIN TRANSACTION;")
         for scope, allts in data.iteritems():
             for ts, hege in allts.iteritems():
                 saverQueue.put(("hegemony", (ts, scope, hege)) )
-        saverQueue.put("COMMIT;")
+        # saverQueue.put("COMMIT;")
 
         logging.debug("Finished")
         saverQueue.join()
