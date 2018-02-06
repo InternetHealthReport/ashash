@@ -29,7 +29,19 @@ The plot is available in the ./Comcast_20171107_rv3/ folder, and should look lik
 
 The bump in Level(3) hegemony (AS3356) at 18:00 UTC reveals the BGP route leak that lasted for about 90 minutes.
 
+## Online Results
+Results from Jan 2004 are available through a REST API on http://ihr.iijlab.net/api/doc. These results are monthly updated, and we are planning to make them hourly available.
+
+### Format
+Two formats are available, HTML and JSON. The HTML format allows developpers to easily play with the API. The JSON format provides a programmatic access to our reports. The results are formatted in HTML if you access the API with your web browser, JSON is used otherwise.
+
+### Filtering
+You can filter your search by adding parameters in the URL. For example:
+
+- http://ihr.iijlab.net/ihr/api/hegemony/?originasn=20940&timebin__gte=2017-11-01T00:00&timebin__lte=2017-11-20T23:59 provides hegemony scores of transit networks towards Akamai on 2017/11/20.
+- http://ihr.iijlab.net/ihr/api/hegemony/?originasn=0&af=4&timebin__gte=2017-11-20T00:00&timebin__lte=2017-11-20T23:59 provides AS hegemony for the IPv4 global graph on 2017/11/20.
+
 
 ## References
-[Romain Fontugne, Anant Shah, Emile Aben, The (thin) Bridges of AS Connectivity: Measuring Dependency using AS Hegemony, arXiv:1711.02805.](https://arxiv.org/pdf/1711.02805)
-[Romain Fontugne, Anant Shah, Emile Aben, AS Hegemony: A Robust Metric for AS Centrality, SIGCOMM Posters and Demos '17.](http://www.iij-ii.co.jp/en/lab/researchers/romain/papers/romain_sigcomm2017.pdf)
+- [Romain Fontugne, Anant Shah, Emile Aben, The (thin) Bridges of AS Connectivity: Measuring Dependency using AS Hegemony, arXiv:1711.02805.](https://arxiv.org/pdf/1711.02805)
+- [Romain Fontugne, Anant Shah, Emile Aben, AS Hegemony: A Robust Metric for AS Centrality, SIGCOMM Posters and Demos '17.](http://www.iij-ii.co.jp/en/lab/researchers/romain/papers/romain_sigcomm2017.pdf)
