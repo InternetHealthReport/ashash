@@ -1,63 +1,35 @@
 # ASHash
 
 ## Requirements
-#### Python libraries:
-- py-radix
-- simhash
-- mmh3
-- numpy
-- scipy
-- matplotlib
-- networkx
-- more_itertools
-- apsw
+You will need to install the following python libraries to use this code:
 
-#### BGP tools:
-- bgpdump
-- bgpstream
+- py-radix: https://pypi.python.org/pypi/py-radix
+- pybgpstream (from source): https://bgpstream.caida.org/docs/install/pybgpstream
+- apsw: https://pypi.python.org/pypi/apsw
 
-Both bgpdump and bgpstream are optional but you need at least one of them.
+## Example
+As an example, we look at AS hegemony changes during the Comcast outage caused by Level(3) BGP route leak on Nov. 11th, 2017.
 
-## Usage:
+The first step is to fetch corresponding BGP data and compute AS hegemony for this dataset. This may consumes a lot of RAM memory as we need to maintain the RIBs of all analyzed BGP peers. For this example, we employ only one BGP collector, route-views3, that accounts for 17 full feed BGP peers. You'll need about 12GB of free memory to run the following command:
 
-The main program is **ashash.py** and it requires at least three arguments: a RIB dump, update dumps, and a directory to write the results.
-
-#### Example: monitoring the whole Internet from local files:
 ```
-python2 ashash.py /data/myRib.dump /data/myUpdates0.dump /data/myUpdates1.dump
-../results/firstTry/
+python2 src/ashash.py -c route-views3 -o ./Comcast_20171107_rv3/ 2017-11-06T16:00 2017-11-06T22:00
 ```
+The "-c" option designates the BGP collectors that are used. Using more collectors will provide better results but it also consumes more memory. The "-o" option specifies the folder where the results will be saved. And the two dates at the end give the start and end time of the analysis.
+This command will take about 20 minutes to fetch data and compute AS hegemony scores. You can watch the progress in the log file (Comcast_20171107_rv3/log_2017-11-06\ 16:00:00.log). All results are stored in a SQLite database (Comcast_20171107_rv3/results_2017-11-06\ 16:00:00.sql).
 
-
-#### Example: monitoring Google (AS15169) from local files:
+Then you can visualize the AS hegemony scores for paths towards a certain AS using plotLocalHegemony.py. The following command plots the AS hegemony of transit networks towards one of Comcast ASes, AS33667:
 ```
-python2 ashash.py -f 15169  -N 8 -M 8 /data/myRib.dump /data/myUpdates.dump
-../results/google/
+python2 src/analysis/plotLocalHegemony.py -i ./Comcast_20171107_rv3/ -a 33667
 ```
+The "-i" option should point to the folder containing results obtained from the previous step, and the "-a" option designates the origin AS of interest.
+The plot is available in the ./Comcast_20171107_rv3/ folder, and should look like that:
 
-#### Example: monitoring the whole Internet with BGPstream:
-[Let's see what happened on April 22,
-2016](http://bgpmon.net/large-hijack-affects-reachability-of-high-traffic-destinations/)
-```
-python2 ashash.py  "@bgpstream:1461340700,1461340900" "@bgpstream:1461340800,1461346200" ../results/bgpstream/
-```
+![Level3 BGP route leak](http://ihr.iijlab.net/static/ihr/AS33667_localHegemony.png)
 
-That means we get the RIB files from 16:00 ("@bgpstream:1461340700,1461340900") and update files from 16:00 to 17:30 ("@bgpstream:1461340800,1461346200").
+The bump in Level(3) hegemony (AS3356) at 18:00 UTC reveals the BGP route leak that lasted for about 90 minutes.
 
 
-## Output
-Results are written to a file in the directory given as last argument (e.g.
-../results/firstTry/)
-The file is formatted as follows:
-
-``` 
-date:time | nb. of announce | nb. of withdraw | median prefix length (announced) | median path length (announced) | nb. origin AS (announced) | nb. peers analyzed (full feed) | total nb. peers seen | nb. ASNs seen | average nbIP/nbPrefix per peer | nb. anomalous sketches | cum. distance | anomalous ASNs 
-```
-The two important fields are first and the last ones. The first one gives the
-beginning of the time bin, and the last one is the list of reported ASNs. 
-Each ASN is reported in the form of a 3-tuple *(ASN, nbAnoSketch, centralityChange)*.
-- *nbAnoSketch* is the number of sketches where the ASN is found
-anomalous. It ranges between 0 and N (default N=16). Low values should be ignored.
-- *centralityChange* is the absolute centrality increase/decrease recorded for
-  this ASN.
-
+## References
+[Romain Fontugne, Anant Shah, Emile Aben, The (thin) Bridges of AS Connectivity: Measuring Dependency using AS Hegemony, arXiv:1711.02805.](https://arxiv.org/pdf/1711.02805)
+[Romain Fontugne, Anant Shah, Emile Aben, AS Hegemony: A Robust Metric for AS Centrality, SIGCOMM Posters and Demos '17.](http://www.iij-ii.co.jp/en/lab/researchers/romain/papers/romain_sigcomm2017.pdf)
