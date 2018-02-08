@@ -29,6 +29,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("-a","--af", help="address family (4, 6)", type=int, default=4)
 parser.add_argument("--alpha", help="Alpha values for AS hegemony", type=float, default=0.1)
 parser.add_argument("-c","--collector", help="BGP collectors. e.g. route-views.linx rrc00", nargs="+", type=str, default=[ "route-views.linx", "route-views2", "rrc00", "rrc10"])
+parser.add_argument("--discard", help="Discard certain BGP peers from the selected collectors (see -c option). A BGP peer is identified by its ASN. e.g. 3356 2497.", nargs="+", type=str, default=[])
 parser.add_argument("-N", help="number of hash functions for sketching", type=int, default=0) #16
 parser.add_argument("-M", help="number of sketches per hash function", type=int, default=128)
 parser.add_argument("-d","--distThresh", help="simhash distance threshold", type=int, default=3)
@@ -88,7 +89,7 @@ if outlierDetection:
 
 pc = pathCounter.pathCounter(args.starttime, args.endtime, announceQueue, countQueue,
         ribQueue, spatialResolution=args.spatial, af=args.af, 
-        asnFilter=args.filter, timeWindow=args.window, collectors=args.collector )
+        asnFilter=args.filter, timeWindow=args.window, collectors=args.collector, discardedPeers=args.discard )
 ash = asHegemony.asHegemony(countQueue, hegemonyQueue, alpha=args.alpha, saverQueue=saverQueue)
 
 saverQueuePostgre = None
