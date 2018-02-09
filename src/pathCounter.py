@@ -208,6 +208,7 @@ class pathCounter(threading.Thread):
                 zOrig = elem.peer_address
                 zAS = elem.peer_asn
                 if zAS in self.discardedPeers:
+                    elem = rec.get_next_elem()
                     continue
                 zPfx = elem.fields["prefix"]
                 sPath = elem.fields["as-path"]
@@ -312,6 +313,7 @@ class pathCounter(threading.Thread):
 
                 zAS = elem.peer_asn
                 if zAS in self.discardedPeers:
+                    elem = rec.get_next_elem()
                     continue
                 zPfx = elem.fields["prefix"]
                 if zPfx == "0.0.0.0/0":
