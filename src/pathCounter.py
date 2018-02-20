@@ -30,7 +30,8 @@ class pathCounter(threading.Thread):
     #TODO change asnFilter to prefixFilter
     def __init__(self, starttime, endtime, announceQueue, countQueue, ribQueue, 
             spatialResolution=1, af=4, timeWindow=900, asnFilter=None, 
-            collectors=[ "route-views.linx", "route-views2", "rrc00", "rrc10"]):
+            collectors=[ "route-views.linx", "route-views2", "rrc00", "rrc10"],
+            discardedPeers=[]):
 
         threading.Thread.__init__ (self)
         self.__nbaddr = {4:{i: 2**(32-i) for i in range(33) }, 6: {i: 2**(128-i) for i in range(129) }}
@@ -52,6 +53,7 @@ class pathCounter(threading.Thread):
         self.rtree = radix.Radix()
 
         self.collectors = collectors
+        self.discardedPeers = set(discardedPeers)
         self.ts = None
         self.peers = None
         self.peersASN = defaultdict(set) 
@@ -205,6 +207,9 @@ class pathCounter(threading.Thread):
             while(elem):
                 zOrig = elem.peer_address
                 zAS = elem.peer_asn
+                if zAS in self.discardedPeers:
+                    elem = rec.get_next_elem()
+                    continue
                 zPfx = elem.fields["prefix"]
                 sPath = elem.fields["as-path"]
                 # print("%s: %s, %s, %s" % (zDt, zAS, zPfx, elem.fields))
@@ -307,6 +312,9 @@ class pathCounter(threading.Thread):
                     continue
 
                 zAS = elem.peer_asn
+                if zAS in self.discardedPeers:
+                    elem = rec.get_next_elem()
+                    continue
                 zPfx = elem.fields["prefix"]
                 if zPfx == "0.0.0.0/0":
                     elem = rec.get_next_elem()
