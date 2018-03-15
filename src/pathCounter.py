@@ -27,11 +27,10 @@ def dt2ts(dt):
 
 class pathCounter(threading.Thread):
 
-    #TODO change asnFilter to prefixFilter
     def __init__(self, starttime, endtime, announceQueue, countQueue, ribQueue, 
-            spatialResolution=1, af=4, timeWindow=900, asnFilter=None, 
-            collectors=[ "route-views.linx", "route-views2", "rrc00", "rrc10"],
-            discardedPeers=[]):
+            spatialResolution=1, af=4, timeWindow=900, #asnFilter=None, 
+            collectors=[ "route-views.linx", "route-views3", "rrc00", "rrc10"],
+            includedPeers=[], excludedPeers=[], includedOrigins=[], excludedOrigins=[]):
 
         threading.Thread.__init__ (self)
         self.__nbaddr = {4:{i: 2**(32-i) for i in range(33) }, 6: {i: 2**(128-i) for i in range(129) }}
@@ -47,13 +46,18 @@ class pathCounter(threading.Thread):
 
         self.spatialResolution = spatialResolution
         self.af = af
-        self.asnFilter = asnFilter
+        # self.asnFilter = asnFilter
         self.timeWindow = timeWindow
 
         self.rtree = radix.Radix()
 
         self.collectors = collectors
-        self.discardedPeers = set(discardedPeers)
+        self.excludedPeers = set([int(x) for x in excludedPeers])
+        self.includedPeers = set([int(x) for x in includedPeers])
+        self.excludedOriginASN = set([x.strip() for x in excludedOrigins if "/" not in x])
+        self.includedOriginASN = set([x.strip() for x in includedOrigins if "/" not in x])
+        self.excludedPrefix = set([x.strip() for x in excludedOrigins if "/" in x])
+        self.includedPrefix = set([x.strip() for x in includedOrigins if "/" in x])
         self.ts = None
         self.peers = None
         self.peersASN = defaultdict(set) 
@@ -184,14 +188,20 @@ class pathCounter(threading.Thread):
         else:
             bgprFilter +=  " and ipversion 4"
 
-        # bgprFilter += " and collector rrc10 "
         for c in self.collectors:
             bgprFilter += " and collector %s " % c
 
-        if not self.asnFilter is None:
-            bgprFilter += ' and path %s$' % self.asnFilter
+        # if not self.asnFilter is None:
+            # bgprFilter += ' and path %s$' % self.asnFilter
+        for p in self.includedPeers:
+            bgprFilter += " and peer %s " % p
+
+        for p in self.includedPrefix:
+            bgprFilter += " and prefix more %s " % p
+
         
         logging.info("Connecting to BGPstream... (%s)" % bgprFilter)
+        logging.info("Timestamps: %s, %s" % (self.startts-3600, self.startts+3600))
         stream.parse_filter_string(bgprFilter)
         stream.add_interval_filter(self.startts-3600, self.startts+3600)
         if self.livemode:
@@ -207,21 +217,28 @@ class pathCounter(threading.Thread):
             while(elem):
                 zOrig = elem.peer_address
                 zAS = elem.peer_asn
-                if zAS in self.discardedPeers:
+                if zAS in self.excludedPeers or (len(self.includedPeers) and zAS not in self.includedPeers):
                     elem = rec.get_next_elem()
                     continue
                 zPfx = elem.fields["prefix"]
                 sPath = elem.fields["as-path"]
                 # print("%s: %s, %s, %s" % (zDt, zAS, zPfx, elem.fields))
 
-                if zPfx == "0.0.0.0/0":
+                if zPfx == "0.0.0.0/0" or zPfx in self.excludedPrefix or (len(self.includedPrefix) and zPfx not in self.includedPrefix):
                     elem = rec.get_next_elem()
                     continue
 
-                self.peersASN[zOrig].add(zAS)
-
                 path = sPath.split(" ")
                 origAS = path[-1]
+                if origAS in self.excludedOriginASN or (len(self.includedOriginASN) and origAS not in self.includedOriginASN):
+                    elem = rec.get_next_elem()
+                    continue
+                    # FIXME: this is not going to work in the case of
+                    # delegated prefixes (and using IP addresses as spatial
+                    # resolution) 
+
+                self.peersASN[zOrig].add(zAS)
+
                 if len(path) < 2:
                     # Ignore paths with only one AS
                     elem = rec.get_next_elem()
@@ -284,12 +301,13 @@ class pathCounter(threading.Thread):
             bgprFilter += " and collector %s " % c
 
 
-        if self.asnFilter is not None:
-            # TOFIX filter is now deprecated, we need to have both
-            # announcements and withdrawals
-            bgprFilter += ' and (path %s$ or elemtype withdrawals)' % self.asnFilter
+        # if self.asnFilter is not None:
+            # # TOFIX filter is now deprecated, we need to have both
+            # # announcements and withdrawals
+            # bgprFilter += ' and (path %s$ or elemtype withdrawals)' % self.asnFilter
         
         logging.info("Connecting to BGPstream... (%s)" % bgprFilter)
+        logging.info("Timestamps: %s, %s" % (self.starts, selft.endts))
         stream.parse_filter_string(bgprFilter)
         stream.add_interval_filter(self.startts, self.endts)
         if self.livemode:
@@ -312,11 +330,11 @@ class pathCounter(threading.Thread):
                     continue
 
                 zAS = elem.peer_asn
-                if zAS in self.discardedPeers:
+                if zAS in self.excludedPeers or (len(self.includedPeers) and zAS not in self.includedPeers):
                     elem = rec.get_next_elem()
                     continue
                 zPfx = elem.fields["prefix"]
-                if zPfx == "0.0.0.0/0":
+                if zPfx == "0.0.0.0/0" or zPfx in self.excludedPrefix or (len(self.includedPrefix) and zPfx not in self.includedPrefix):
                     elem = rec.get_next_elem()
                     continue
 
@@ -383,6 +401,13 @@ class pathCounter(threading.Thread):
                 # Announce: update counters
                     sPath = elem.fields["as-path"]
                     path = sPath.split(" ")
+                    origAS = path[-1]
+
+                    if origAS in self.excludedOriginASN or (len(self.includedOriginASN) and origAS not in self.includedOriginASN):
+                        elem = rec.get_next_elem()
+                        continue
+                        # FIXME: this is not going to work in the case of
+                        # delegated prefixes or implicit withdraws
 
                     if len(path) < 2:
                         # Ignoring paths with only one AS
@@ -391,8 +416,6 @@ class pathCounter(threading.Thread):
                     
                     if self.announceQueue is not None:
                         self.announceQueue.put( (zDt, zOrig, zAS, zPfx, path) )
-
-                    origAS = path[-1]
 
                     # Announce:
                     if node is None or not zOrig in node.data :
