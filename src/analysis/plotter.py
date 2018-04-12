@@ -83,7 +83,7 @@ class Plotter(object):
         # print "mean nodes: %s" % np.mean(res.values())
         return res
 
-    def hegemonyDistLocalGraph(self, asn, label=None, title=None, fignum=13, filename="results/fig/hegemonyDistLocalGraph.pdf", color=None, contour=None):
+    def hegemonyDistLocalGraph(self, asn, label=None, title=None, fignum=13, filename="hegemonyDistLocalGraph.pdf", color=None, contour=None):
         """Plot the distribution of AS hegemony for all local graphs"""
 
         plt.figure(fignum)
@@ -131,7 +131,7 @@ class Plotter(object):
         return data
 
 
-    def hegemonyDistGlobalGraph(self, fignum=10, filename="results/fig/hegemonyDistGlobalGraph.pdf", label="Global Graph", color=None, contour=None, subfig=False, fig=None, ax=None, axins=None):
+    def hegemonyDistGlobalGraph(self, fignum=10, filename="hegemonyDistGlobalGraph.pdf", label="Global Graph", color=None, contour=None, subfig=False, fig=None, ax=None, axins=None):
         """Plot the distribution of AS hegemony for the global graph"""
 
         if fig is None:
@@ -173,7 +173,7 @@ class Plotter(object):
         return data, yval, fig, ax, axins
 
 
-    def nbNodeDistLocalGraph(self, fignum=11, allNodes=False, noZeroNodes=True, filename="results/fig/nbNodeDistLocalGraph.pdf", labelNoZero="$\mathcal{H}>0$", color=None):
+    def nbNodeDistLocalGraph(self, fignum=11, allNodes=False, noZeroNodes=True, filename="nbNodeDistLocalGraph.pdf", labelNoZero="$\mathcal{H}>0$", color=None):
         """Plot the distribution of the number of nodes in the local graphs"""
 
         plt.figure(fignum)
@@ -225,7 +225,7 @@ class Plotter(object):
 
         return {"all":dataAll, "noZero":dataNoZero}
 
-    def hegemonyEvolutionLocalGraph(self, scope, filename="results/fig/AS%s_hegeEvolution.pdf", fileDate=False, expid=1):
+    def hegemonyEvolutionLocalGraph(self, scope, filename="AS%s_hegeEvolution.pdf", fileDate=False, expid=1):
 
         filename = filename % scope
         hege = defaultdict(lambda: defaultdict(list))
