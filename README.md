@@ -9,7 +9,7 @@ You will need to install the following python libraries to use this code:
 - apsw: https://pypi.python.org/pypi/apsw
 
 ## Example
-As an example, we look at AS hegemony changes during the Comcast outage caused by Level(3) BGP route leak on Nov. 11th, 2017.
+As an example, we look at AS hegemony changes during the Comcast outage caused by Level(3) BGP route leak on Nov. 6th, 2017.
 
 The first step is to fetch corresponding BGP data and compute AS hegemony for this dataset. This may consumes a lot of RAM memory as we need to maintain the RIBs of all analyzed BGP peers. For this example, we employ only one BGP collector, route-views3, that accounts for 17 full feed BGP peers. You'll need about 12GB of free memory to run the following command:
 
