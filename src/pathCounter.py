@@ -307,7 +307,7 @@ class pathCounter(threading.Thread):
             # bgprFilter += ' and (path %s$ or elemtype withdrawals)' % self.asnFilter
         
         logging.info("Connecting to BGPstream... (%s)" % bgprFilter)
-        logging.info("Timestamps: %s, %s" % (self.starts, selft.endts))
+        logging.info("Timestamps: %s, %s" % (self.startts, self.endts))
         stream.parse_filter_string(bgprFilter)
         stream.add_interval_filter(self.startts, self.endts)
         if self.livemode:
