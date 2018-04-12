@@ -10,8 +10,8 @@ if len(sys.argv)<2:
     sys.exit()
 
 years = [2018]
-months = [1] #range(1,13)
-days = range(13,31)
+months = [2] #range(1,13)
+days = range(11,20)
 
 af = int(sys.argv[1])
 
@@ -30,7 +30,7 @@ for ye in years:
         for da in days:
             dateStart = "%s-%s-%sT00:00" % (ye,mo,da) 
             dateEnd = "%s-%s-%sT23:59" % (ye,mo,da) 
-            cmd = 'python2 src/ashash.py -a %s -s %s -w 900 -p -o /ssd/ashash/resultsv%s/ihr/ %s %s' % (af, spatialResolution, af, dateStart, dateEnd)
+            cmd = 'python2 src/ashash.py -a %s -s %s -w 900 -p -o resultsv%s/ihr/ %s %s' % (af, spatialResolution, af, dateStart, dateEnd)
 
             print(cmd)
             if not os.path.exists("resultsv%s/ihr/log_%s:00.txt" % (af,dateStart.replace("T"," "))):

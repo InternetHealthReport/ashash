@@ -2,7 +2,7 @@ import sys
 import psycopg2
 import psycopg2.extras
 from pgcopy import CopyManager
-from io import BytesIO
+# from io import BytesIO
 import logging
 from collections import defaultdict
 import json
@@ -11,7 +11,7 @@ import glob
 from datetime import datetime
 from multiprocessing import JoinableQueue as mpQueue
 from multiprocessing import Process
-from StringIO import StringIO
+from cStringIO import StringIO
 
 
 class saverPostgresql(object):
@@ -106,10 +106,15 @@ class saverPostgresql(object):
 
     def commit(self):
         logging.warn("psql: start copy")
-        self.cpmgr.copy(self.dataHege, BytesIO)
+        self.cpmgr.copy(self.dataHege, StringIO)
+        self.conn.commit()
+        logging.warn("psql: end copy")
+        # Populate the table for AS hegemony cone
+        logging.warn("psql: adding hegemony cone")
+        self.cursor.execute("INSERT INTO ihr_hegemonycone (timebin, conesize, af, asn_id) SELECT timebin, count(distinct originasn_id), af, asn_id FROM ihr_hegemony WHERE timebin=%s and asn_id!=originasn_id and originasn_id!=0 GROUP BY timebin, af, asn_id;", (self.currenttime,))
         self.conn.commit()
         self.dataHege = []
-        logging.warn("psql: end copy")
+        logging.warn("psql: end hegemony cone")
 
 
 if __name__ == "__main__":
