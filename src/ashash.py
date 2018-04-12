@@ -1,4 +1,5 @@
 import argparse
+import ConfigParser
 import os
 import sys
 import logging
@@ -26,34 +27,64 @@ def valid_date(s):
         raise argparse.ArgumentTypeError(msg)
 
 parser = argparse.ArgumentParser()
-parser.add_argument("-a","--af", help="address family (4, 6)", type=int, default=4)
-parser.add_argument("--alpha", help="Alpha values for AS hegemony", type=float, default=0.1)
-parser.add_argument("-c","--collector", help="BGP collectors. e.g. route-views.linx rrc00", nargs="+", type=str, default=[ "route-views.linx", "route-views2", "rrc00", "rrc10"])
-parser.add_argument("--discard", help="Discard certain BGP peers from the selected collectors (see -c option). A BGP peer is identified by its ASN. e.g. 3356 2497.", nargs="+", type=int, default=[])
-parser.add_argument("-N", help="number of hash functions for sketching", type=int, default=0) #16
-parser.add_argument("-M", help="number of sketches per hash function", type=int, default=128)
-parser.add_argument("-d","--distThresh", help="simhash distance threshold", type=int, default=3)
-parser.add_argument("-f","--filter", help="filter per origin AS (Deprecated, will be removed soon)", type=str, default=None)
-parser.add_argument("-g","--asGraph", help="dump the global AS graph", action="store_true")
-parser.add_argument("-p","--postgre", help="send results to postgreSQL", action="store_true")
-parser.add_argument("-r","--minVoteRatio", help="Minimum ratio of sketches to detect anomalies (should be between 0 and 1)", type=float, default=0.5)
-parser.add_argument("-s", "--spatial", help="spatial resolution (0 for prefix, 1 for address)", type=int, default=1)
-parser.add_argument("-w", "--window", help="Time window: time resolution in seconds", type=int, default=900)
-parser.add_argument("-o", "--output", help="output directory", default="results/")
-parser.add_argument("starttime", help="UTC start time, e.g. 2017-10-17T00:00 (should correspond to a date and time when RIB files are available)",  type=valid_date)
-parser.add_argument("endtime", help="UTC end time", type=valid_date)
+parser.add_argument("-C","--config_file", help="Get all parameters from the specified config file", type=str, default="conf/default.ini")
+parser.add_argument("-a","--af", help="address family (4, 6)", type=str)
+parser.add_argument("--alpha", help="Alpha values for AS hegemony", type=str)
+parser.add_argument("-c","--collector", help="BGP collectors. e.g. route-views.linx,rrc00", type=str)
+parser.add_argument("-N", help="number of hash functions for sketching", type=str) #16
+parser.add_argument("-M", help="number of sketches per hash function", type=str)
+parser.add_argument("-d","--distThresh", help="simhash distance threshold", type=str)
+parser.add_argument("-g","--asGraph", help="dump the global AS graph")
+parser.add_argument("-p","--postgre", help="send results to postgreSQL")
+parser.add_argument("-r","--minVoteRatio", help="Minimum ratio of sketches to detect anomalies (should be between 0 and 1)", type=str)
+parser.add_argument("-s", "--spatial", help="spatial resolution (0 for prefix, 1 for address)", type=str)
+parser.add_argument("-w", "--window", help="Time window: time resolution in seconds", type=str)
+parser.add_argument("-o", "--output", help="output directory")
+parser.add_argument("starttime", help="UTC start time, e.g. 2017-10-17T00:00 (should correspond to a date and time when RIB files are available)",  type=str)
+parser.add_argument("endtime", help="UTC end time", type=str)
 args = parser.parse_args()
+argsDict = vars(args)
+
+# hack to remove variables with default values of None
+for (key,value) in argsDict.items():
+    if value is None:
+        del argsDict[key]
+
+config_parser = ConfigParser.ConfigParser()
+config_parser.read(args.config_file)
+
+# Read config file
+starttime = valid_date(config_parser.get("date","starttime",False,argsDict))
+endtime = valid_date(config_parser.get("date","endtime",False,argsDict))
+collector = [x.strip() for x in config_parser.get("peers","collector",False,argsDict).split(",")  if x.strip() != ""]
+includedPeers = [x.strip() for x in config_parser.get("peers","include",False,argsDict).split(",")  if x.strip() != ""]
+excludedPeers = [x.strip() for x in config_parser.get("peers","exclude",False,argsDict).split(",")  if x.strip() != ""]
+af = int(config_parser.get("origins","af",False,argsDict))
+spatial = int(config_parser.get("origins","spatial",False,argsDict))
+includedOrigins = [x.strip() for x in config_parser.get("origins","include",False,argsDict).split(",") if x.strip() != ""]  
+excludedOrigins = [x.strip() for x in config_parser.get("origins","exclude",False,argsDict).split(",") if x.strip() != ""]
+alpha = float(config_parser.get("hegemony","alpha",False,argsDict))
+window = int(config_parser.get("hegemony","window",False,argsDict))
+N = int(config_parser.get("detection","N",False,argsDict))
+M = int(config_parser.get("detection","M",False,argsDict))
+distThresh = int(config_parser.get("detection","distThresh",False,argsDict))
+minVoteRatio = float(config_parser.get("detection","minVoteRatio",False,argsDict))
+output = config_parser.get("output","output",False,argsDict)
+writeASGraph = bool(int(config_parser.get("output","asGraph",False,argsDict)))
+postgre = bool(int(config_parser.get("output","postgre",False,argsDict)))
 
 try:
-    os.makedirs(os.path.dirname(args.output))
+    os.makedirs(os.path.dirname(output))
 except OSError as exc: # Guard against race condition
     if exc.errno != errno.EEXIST:
         raise
 
 FORMAT = '%(asctime)s %(processName)s %(message)s'
-logging.basicConfig(format=FORMAT, filename=args.output+'log_%s.log' % args.starttime, level=logging.DEBUG, datefmt='%Y-%m-%d %H:%M:%S')
+logging.basicConfig(format=FORMAT, filename=output+'log_%s.log' % starttime, level=logging.DEBUG, datefmt='%Y-%m-%d %H:%M:%S')
 logging.info("Started: %s" % sys.argv)
 logging.info("Arguments: %s" % args)
+for sec in config_parser.sections():
+    logging.info("Config: [%s] %s" % (sec,config_parser.items(sec,False,argsDict)))
 
 # Initialisation
 ribQueue = None
@@ -61,7 +92,7 @@ countQueue = Queue.Queue(10)
 hegemonyQueue = Queue.Queue(60000)
 saverQueue = mpQueue(10000)
 announceQueue = None
-nbGM = args.N/2 
+nbGM = N/2 
 pipeGM = []
 for i in range(nbGM):
     pipeGM.append(mpPipe(False))
@@ -69,7 +100,7 @@ for i in range(nbGM):
 
 # Analysis Modules
 ag = None
-if args.asGraph:
+if writeASGraph:
     ribQueue = Queue.Queue(5000)
     ag = asGraph.asGraph(ribQueue)
 
@@ -79,7 +110,7 @@ if nbGM:
     announceQueue = Queue.Queue(5000)
     hegemonyQueuePM = Queue.Queue(60000)
     for i in range(nbGM):
-        gm.append( Process(target=graphMonitor.graphMonitor, args=(pipeGM[i][0], args.N, args.M, args.distThresh, args.minVoteRatio, saverQueue), name="GM%s" % i ))
+        gm.append( Process(target=graphMonitor.graphMonitor, args=(pipeGM[i][0], N, M, distThresh, minVoteRatio, saverQueue), name="GM%s" % i ))
     pm = pathMonitor.pathMonitor(hegemonyQueuePM, announceQueue, saverQueue=saverQueue)
 
 outlierDetection = False
@@ -87,20 +118,20 @@ if outlierDetection:
     pipeOD = mpPipe(False)
     od = Process(target=outlierDetection.outlierDetection, args=(pipeOD[0], 3.0, 5), name="OD")
 
-pc = pathCounter.pathCounter(args.starttime, args.endtime, announceQueue, countQueue,
-        ribQueue, spatialResolution=args.spatial, af=args.af, 
-        asnFilter=args.filter, timeWindow=args.window, collectors=args.collector, discardedPeers=args.discard )
-ash = asHegemony.asHegemony(countQueue, hegemonyQueue, alpha=args.alpha, saverQueue=saverQueue)
+pc = pathCounter.pathCounter(starttime, endtime, announceQueue, countQueue,
+        ribQueue, spatialResolution=spatial, af=af, 
+         timeWindow=window, collectors=collector, excludedPeers=excludedPeers, includedPeers=includedPeers, includedOrigins=includedOrigins, excludedOrigins=excludedOrigins )
+ash = asHegemony.asHegemony(countQueue, hegemonyQueue, alpha=alpha, saverQueue=saverQueue)
 
 saverQueuePostgre = None
-if args.postgre:
+if postgre:
     logging.info("Will push results to Postgresql")
     import saverPostgresql
     saverQueuePostgre = mpQueue(10000)
-    sp = Process(target=saverPostgresql.saverPostgresql, args=(args.starttime, args.af, saverQueuePostgre), name="saverPostgresql")
+    sp = Process(target=saverPostgresql.saverPostgresql, args=(starttime, af, saverQueuePostgre), name="saverPostgresql")
     sp.start()
 
-sqldb = args.output+"results_%s.sql" % args.starttime
+sqldb = output+"results_%s.sql" % starttime
 ss = Process(target=saverSQLite.saverSQLite, args=(sqldb, saverQueue, saverQueuePostgre), name="saverSQLite")
 ss.start()
 saverQueue.put(("experiment", [datetime.now(), str(sys.argv), str(args)]))
@@ -127,7 +158,7 @@ while pc.isAlive() or (not hegemonyQueue.empty()) or (not countQueue.empty()):
                 pm.start() # start late to avoid looping unecessarily
             if ag is not None:
                 logging.debug("writing graph")
-                ag.saveGraph(args.output+"asgraph_%s.txt" % args.starttime)
+                ag.saveGraph(output+"asgraph_%s.txt" % starttime)
         # logging.debug("(main) dispatching hegemony %s" % elem[1])
         if nbGM:
             if elem[1] == "all":
