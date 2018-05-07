@@ -30,7 +30,8 @@ class pathCounter(threading.Thread):
     def __init__(self, starttime, endtime, announceQueue, countQueue, ribQueue, 
             spatialResolution=1, af=4, timeWindow=900, #asnFilter=None, 
             collectors=[ "route-views.linx", "route-views3", "rrc00", "rrc10"],
-            includedPeers=[], excludedPeers=[], includedOrigins=[], excludedOrigins=[]):
+            includedPeers=[], excludedPeers=[], includedOrigins=[], excludedOrigins=[], 
+            onlyFullFeed=True):
 
         threading.Thread.__init__ (self)
         self.__nbaddr = {4:{i: 2**(32-i) for i in range(33) }, 6: {i: 2**(128-i) for i in range(129) }}
@@ -62,6 +63,7 @@ class pathCounter(threading.Thread):
         self.peers = None
         self.peersASN = defaultdict(set) 
         self.peersPerASN = defaultdict(list)
+        self.onlyFullFeed = onlyFullFeed
 
         self.counter = {
                 "all": pathCountDict(),
@@ -72,7 +74,8 @@ class pathCounter(threading.Thread):
     def run(self):
         logging.info("Reading RIB files...")
         self.readrib()
-        self.peers = self.findFullFeeds()
+        if self.onlyFullFeed: 
+            self.peers = self.findFullFeeds()
         self.peersASN = {p:self.peersASN[p] for p in self.peers} 
         for p, a in self.peersASN.iteritems():
             if len(a)>1:
