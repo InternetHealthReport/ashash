@@ -111,7 +111,7 @@ class pathCounter(threading.Thread):
             return self.findParent(parent, zOrig)
 
     def findFullFeeds(self, threshold):
-        logging.debug("(pathCounter) finding full feed peers...")
+        # logging.debug("(pathCounter) finding full feed peers...")
         nbPrefixes = defaultdict(int)
         nodes = self.rtree.nodes()
 
@@ -120,7 +120,7 @@ class pathCounter(threading.Thread):
                 nbPrefixes[peer] += 1
 
         res = set([peer for peer, nbPfx in nbPrefixes.iteritems() if nbPfx>len(nodes)*threshold])
-        logging.debug("(pathCounter) %s full feed peers" % len(res))
+        logging.debug("(pathCounter) Using %s peers out of %s (threshold=%s)" % len(res), len(nbPrefixes), threshold)
 
         return res
 
@@ -259,6 +259,8 @@ class pathCounter(threading.Thread):
                     self.ribQueue.put( (zDt, zOrig, zAS, zPfx, path ) )
 
                 node.data[zOrig] = {"path": set(path), "count": 0, "origAS":origAS}
+
+                # print "%s, %s, %s, %s, %s" % (elem.time, elem.type, elem.peer_address, elem.peer_asn, elem.fields)
 
                 if self.spatialResolution:
                     # compute weight for this path
