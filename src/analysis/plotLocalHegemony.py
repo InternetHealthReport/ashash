@@ -13,7 +13,8 @@ def localGraphTransitEvolution(scope, name, dbList=None, outdir="./", expid=1):
     if name is None:
         plt.title("Transits towards AS%s\n\n" % scope)
     else:
-        plt.title(name+"\n\n")
+        if name!="":
+            plt.title(name+"\n\n")
 
     plt.tight_layout()
     plt.savefig(outdir+"/AS%s_localHegemony.pdf" %  scope)

@@ -75,7 +75,9 @@ class pathCounter(threading.Thread):
         logging.info("Reading RIB files...")
         self.readrib()
         if self.onlyFullFeed: 
-            self.peers = self.findFullFeeds()
+            self.peers = self.findFullFeeds(0.75)
+        else:
+            self.peers = self.findFullFeeds(0)
         self.peersASN = {p:self.peersASN[p] for p in self.peers} 
         for p, a in self.peersASN.iteritems():
             if len(a)>1:
@@ -108,7 +110,7 @@ class pathCounter(threading.Thread):
         else:
             return self.findParent(parent, zOrig)
 
-    def findFullFeeds(self):
+    def findFullFeeds(self, threshold):
         logging.debug("(pathCounter) finding full feed peers...")
         nbPrefixes = defaultdict(int)
         nodes = self.rtree.nodes()
@@ -117,7 +119,7 @@ class pathCounter(threading.Thread):
             for peer in node.data.keys():
                 nbPrefixes[peer] += 1
 
-        res = set([peer for peer, nbPfx in nbPrefixes.iteritems() if nbPfx>len(nodes)*0.75])
+        res = set([peer for peer, nbPfx in nbPrefixes.iteritems() if nbPfx>len(nodes)*threshold])
         logging.debug("(pathCounter) %s full feed peers" % len(res))
 
         return res
