@@ -59,7 +59,7 @@ endtime = valid_date(config_parser.get("date","endtime",False,argsDict))
 collector = [x.strip() for x in config_parser.get("peers","collector",False,argsDict).split(",")  if x.strip() != ""]
 includedPeers = [x.strip() for x in config_parser.get("peers","include",False,argsDict).split(",")  if x.strip() != ""]
 excludedPeers = [x.strip() for x in config_parser.get("peers","exclude",False,argsDict).split(",")  if x.strip() != ""]
-onlyFullFeed = bool(config_parser.get("peers","onlyFullFeed",True,argsDict))
+onlyFullFeed = bool(int(config_parser.get("peers","onlyfullfeed")))
 af = int(config_parser.get("origins","af",False,argsDict))
 spatial = int(config_parser.get("origins","spatial",False,argsDict))
 includedOrigins = [x.strip() for x in config_parser.get("origins","include",False,argsDict).split(",") if x.strip() != ""]  
