@@ -120,7 +120,7 @@ class pathCounter(threading.Thread):
                 nbPrefixes[peer] += 1
 
         res = set([peer for peer, nbPfx in nbPrefixes.iteritems() if nbPfx>len(nodes)*threshold])
-        logging.debug("(pathCounter) Using %s peers out of %s (threshold=%s)" % len(res), len(nbPrefixes), threshold)
+        logging.debug("(pathCounter) Using %s peers out of %s (threshold=%s)" % (len(res), len(nbPrefixes), threshold))
 
         return res
 
