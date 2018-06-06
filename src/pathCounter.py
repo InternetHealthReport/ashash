@@ -8,6 +8,7 @@ from datetime import datetime
 import threading
 import copy
 import logging
+import csvReader
 
 from _pybgpstream import BGPStream, BGPRecord, BGPElem
 
@@ -25,13 +26,14 @@ def dt2ts(dt):
     return (dt - datetime(1970, 1, 1)).total_seconds()
 
 
+
 class pathCounter(threading.Thread):
 
     def __init__(self, starttime, endtime, announceQueue, countQueue, ribQueue, 
             spatialResolution=1, af=4, timeWindow=900, #asnFilter=None, 
             collectors=[ "route-views.linx", "route-views3", "rrc00", "rrc10"],
             includedPeers=[], excludedPeers=[], includedOrigins=[], excludedOrigins=[], 
-            onlyFullFeed=True):
+            onlyFullFeed=True, csvFile=None):
 
         threading.Thread.__init__ (self)
         self.__nbaddr = {4:{i: 2**(32-i) for i in range(33) }, 6: {i: 2**(128-i) for i in range(129) }}
@@ -69,6 +71,8 @@ class pathCounter(threading.Thread):
                 "all": pathCountDict(),
                 "origas": defaultdict(pathCountDict),
                 }
+
+        self.csvFile = csvFile
 
 
     def run(self):
@@ -182,43 +186,52 @@ class pathCounter(threading.Thread):
 
 
     def readrib(self):
-        # create a new bgpstream instance
-        stream = BGPStream()
-        # create a reusable bgprecord instance
-        rec = BGPRecord()
-        bgprFilter = "type ribs"
+        stream = None
+        rec = None
+        if self.csvFile is None:
+            # create a new bgpstream instance
+            stream = BGPStream()
 
-        if self.af == 6:
-            bgprFilter += " and ipversion 6"
+            # create a reusable bgprecord instance
+            rec = BGPRecord()
+            bgprFilter = "type ribs"
+
+            if self.af == 6:
+                bgprFilter += " and ipversion 6"
+            else:
+                bgprFilter +=  " and ipversion 4"
+
+            for c in self.collectors:
+                bgprFilter += " and collector %s " % c
+
+            # if not self.asnFilter is None:
+                # bgprFilter += ' and path %s$' % self.asnFilter
+            for p in self.includedPeers:
+                bgprFilter += " and peer %s " % p
+
+            for p in self.includedPrefix:
+                bgprFilter += " and prefix more %s " % p
+
+            
+            logging.info("Connecting to BGPstream... (%s)" % bgprFilter)
+            logging.info("Timestamps: %s, %s" % (self.startts-3600, self.startts+3600))
+            stream.parse_filter_string(bgprFilter)
+            stream.add_interval_filter(self.startts-3600, self.startts+3600)
+            if self.livemode:
+                stream.set_live_mode()
+
+            stream.start()
+
         else:
-            bgprFilter +=  " and ipversion 4"
+            rec = csvReader.csvReader(self.csvFile)
 
-        for c in self.collectors:
-            bgprFilter += " and collector %s " % c
-
-        # if not self.asnFilter is None:
-            # bgprFilter += ' and path %s$' % self.asnFilter
-        for p in self.includedPeers:
-            bgprFilter += " and peer %s " % p
-
-        for p in self.includedPrefix:
-            bgprFilter += " and prefix more %s " % p
-
-        
-        logging.info("Connecting to BGPstream... (%s)" % bgprFilter)
-        logging.info("Timestamps: %s, %s" % (self.startts-3600, self.startts+3600))
-        stream.parse_filter_string(bgprFilter)
-        stream.add_interval_filter(self.startts-3600, self.startts+3600)
-        if self.livemode:
-            stream.set_live_mode()
-
-        stream.start()
         # for line in p1.stdout: 
-        while(stream.get_next_record(rec)):
+        while(self.csvFile and not rec.running ) or (stream and stream.get_next_record(rec)):
             if rec.status  != "valid":
                 print rec.project, rec.collector, rec.type, rec.time, rec.status
             zDt = rec.time
             elem = rec.get_next_elem()
+
             while(elem):
                 zOrig = elem.peer_address
                 zAS = elem.peer_asn
@@ -294,6 +307,10 @@ class pathCounter(threading.Thread):
                 elem = rec.get_next_elem()
 
     def readupdates(self):
+        #TODO implement csv file for update messages?
+        if self.csvFile:
+            return
+
         # create a new bgpstream instance
         stream = BGPStream()
         bgprFilter = "type updates"

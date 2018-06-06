@@ -40,10 +40,14 @@ parser.add_argument("-r","--minVoteRatio", help="Minimum ratio of sketches to de
 parser.add_argument("-s", "--spatial", help="spatial resolution (0 for prefix, 1 for address)", type=str)
 parser.add_argument("-w", "--window", help="Time window: time resolution in seconds", type=str)
 parser.add_argument("-o", "--output", help="output directory")
+parser.add_argument("-f", "--inputFile", help="csv input file", type=str)
 parser.add_argument("starttime", help="UTC start time, e.g. 2017-10-17T00:00 (should correspond to a date and time when RIB files are available)",  type=str)
 parser.add_argument("endtime", help="UTC end time", type=str)
 args = parser.parse_args()
 argsDict = vars(args)
+
+# variables not in the config file
+inputFile = argsDict["inputFile"]
 
 # hack to remove variables with default values of None
 for (key,value) in argsDict.items():
@@ -123,7 +127,7 @@ pc = pathCounter.pathCounter(starttime, endtime, announceQueue, countQueue,
         ribQueue, spatialResolution=spatial, af=af, 
          timeWindow=window, collectors=collector, excludedPeers=excludedPeers, 
          includedPeers=includedPeers, includedOrigins=includedOrigins, 
-         excludedOrigins=excludedOrigins, onlyFullFeed=onlyFullFeed)
+         excludedOrigins=excludedOrigins, onlyFullFeed=onlyFullFeed, csvFile=inputFile)
 ash = asHegemony.asHegemony(countQueue, hegemonyQueue, alpha=alpha, saverQueue=saverQueue)
 
 saverQueuePostgre = None
