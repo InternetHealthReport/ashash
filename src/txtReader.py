@@ -7,13 +7,13 @@ class BGPRecord():
         self.peer_address = peerIP.strip()
         self.peer_asn = peerAS.strip()
         self.fields = {"prefix": prefix.strip(), "as-path": aspath.strip()}
-        # TODO implement communities if we actually use it  
+        # TODO reformat communities if we actually use it  
     
 
-class csvReader():
+class txtReader():
     def __init__(self, csvFile):
         self.csvFile = csvFile
-        self.reader = csv.reader(open(self.csvFile, "r"))
+        self.reader = csv.reader(open(self.csvFile, "r"), delimiter="|")
         self.running = False
 
         # Things that are referenced in BGPstream
@@ -25,7 +25,7 @@ class csvReader():
         self.running = True
         try:
             row = self.reader.next()
-            return BGPRecord(row[0], row[1], row[2], row[3], row[4], row[5] )
+            return BGPRecord(row[1], row[3], row[4], row[5], row[6], row[11] )
 
         except StopIteration:
             return None

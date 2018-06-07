@@ -8,7 +8,7 @@ from datetime import datetime
 import threading
 import copy
 import logging
-import csvReader
+import txtReader
 
 from _pybgpstream import BGPStream, BGPRecord, BGPElem
 
@@ -33,7 +33,7 @@ class pathCounter(threading.Thread):
             spatialResolution=1, af=4, timeWindow=900, #asnFilter=None, 
             collectors=[ "route-views.linx", "route-views3", "rrc00", "rrc10"],
             includedPeers=[], excludedPeers=[], includedOrigins=[], excludedOrigins=[], 
-            onlyFullFeed=True, csvFile=None):
+            onlyFullFeed=True, txtFile=None):
 
         threading.Thread.__init__ (self)
         self.__nbaddr = {4:{i: 2**(32-i) for i in range(33) }, 6: {i: 2**(128-i) for i in range(129) }}
@@ -72,7 +72,7 @@ class pathCounter(threading.Thread):
                 "origas": defaultdict(pathCountDict),
                 }
 
-        self.csvFile = csvFile
+        self.txtFile = txtFile
 
 
     def run(self):
@@ -188,7 +188,7 @@ class pathCounter(threading.Thread):
     def readrib(self):
         stream = None
         rec = None
-        if self.csvFile is None:
+        if self.txtFile is None:
             # create a new bgpstream instance
             stream = BGPStream()
 
@@ -223,10 +223,10 @@ class pathCounter(threading.Thread):
             stream.start()
 
         else:
-            rec = csvReader.csvReader(self.csvFile)
+            rec = txtReader.txtReader(self.txtFile)
 
         # for line in p1.stdout: 
-        while(self.csvFile and not rec.running ) or (stream and stream.get_next_record(rec)):
+        while(self.txtFile and not rec.running ) or (stream and stream.get_next_record(rec)):
             if rec.status  != "valid":
                 print rec.project, rec.collector, rec.type, rec.time, rec.status
             zDt = rec.time
@@ -307,8 +307,8 @@ class pathCounter(threading.Thread):
                 elem = rec.get_next_elem()
 
     def readupdates(self):
-        #TODO implement csv file for update messages?
-        if self.csvFile:
+        #TODO implement txt file for update messages?
+        if self.txtFile:
             return
 
         # create a new bgpstream instance
