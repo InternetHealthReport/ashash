@@ -5,7 +5,7 @@ You will need to install the following python libraries to use this code:
 
 - Python 2.7
 - py-radix: https://pypi.python.org/pypi/py-radix
-- pybgpstream (from source): https://github.com/caida/bgpstream
+- pybgpstream v1.2: https://github.com/caida/bgpstream
 - apsw: https://pypi.python.org/pypi/apsw
 
 ## Example
