@@ -17,9 +17,13 @@ from _pybgpstream import BGPStream, BGPRecord, BGPElem
 def __ddint():
     return defaultdict(int)
 
+def __ddset():
+    return defaultdict(set)
+
 
 def pathCountDict():
-    return {"total": defaultdict(int), "asn": defaultdict(__ddint) ,}
+    return {"total": defaultdict(int), "asn": defaultdict(__ddint),
+            "path_tracker": defaultdict(__ddset), "asn_backup": defaultdict(__ddint)}
 
 
 def dt2ts(dt):
@@ -29,11 +33,11 @@ def dt2ts(dt):
 
 class pathCounter(threading.Thread):
 
-    def __init__(self, starttime, endtime, announceQueue, countQueue, ribQueue, 
-            spatialResolution=1, af=4, timeWindow=900, #asnFilter=None, 
-            collectors=[ "route-views.linx", "route-views3", "rrc00", "rrc10"],
-            includedPeers=[], excludedPeers=[], includedOrigins=[], excludedOrigins=[], 
-            onlyFullFeed=True, txtFile=None):
+    def __init__(self, starttime, endtime, updateQueue, countQueue, ribQueue,
+                 spatialResolution=1, af=4, timeWindow=900,  #asnFilter=None,
+                 collectors=[ "route-views.linx", "route-views3", "rrc00", "rrc10"],
+                 includedPeers=[], excludedPeers=[], includedOrigins=[], excludedOrigins=[],
+                 onlyFullFeed=True, txtFile=None):
 
         threading.Thread.__init__ (self)
         self.__nbaddr = {4:{i: 2**(32-i) for i in range(33) }, 6: {i: 2**(128-i) for i in range(129) }}
@@ -43,7 +47,7 @@ class pathCounter(threading.Thread):
         self.livemode = False
         if endtime > datetime.utcnow():
             self.livemode = True
-        self.announceQueue = announceQueue
+        self.updateQueue = updateQueue
         self.countQueue = countQueue
         self.ribQueue = ribQueue
 
@@ -139,9 +143,13 @@ class pathCounter(threading.Thread):
             # Remove from counter["all"]["total"]
             del self.counter["all"]["total"][peer]
             # Remove from counter["all"]["asn"]
-            for asn, d in self.counter["all"]["asn"].iteritems():
-                if peer in d:
-                    del d[peer]
+            # for asn, d in self.counter["all"]["asn"].iteritems():
+            #     if peer in d:
+            #         del d[peer]
+            for d1, d2 in zip(self.counter["all"]["asn"], self.counter["all"]["path_tracker"]): #b
+                if peer in d1:
+                    del d1[peer]
+                    del d2[peer]
 
             for node in self.rtree.nodes():
                 if peer in node.data:
@@ -152,20 +160,34 @@ class pathCounter(threading.Thread):
                     del node.data[peer]
 
                     # Remove from counter["origas"][..]["asn"]
-                    for asn, d in self.counter["origas"][origAS]["asn"].iteritems():
-                        if peer in d:
-                            del d[peer]
+                    # for asn, d in self.counter["origas"][origAS]["asn"].iteritems():
+                    #     if peer in d:
+                    #         del d[peer]
+                    for d1, d2 in zip(self.counter["origas"][origAS]["asn"], self.counter["origas"][origAS]["path_tracker"]): #b
+                        if peer in d1:
+                            del d1[peer]
+                            del d2[peer]
+
 
 
     def slideTimeWindow(self,ts):
         logging.debug("(pathCounter) sliding window... (ts=%s)" % self.ts)
         self.ts = ts
 
+        self.updateBackupCounter() #b
         self.countQueue.put( (self.ts, self.peersPerASN, self.counter) )
         self.countQueue.join()
         
         logging.debug("(pathCounter) window slided (ts=%s)" % self.ts)
 
+    def updateBackupCounter(self): #b
+        for asn, counter in self.counter["all"]["path_tracker"].iteritems():
+            for peerip, finalCounter in counter.iteritems():
+                self.counter["all"]["asn_backup"][asn][peerip] = sum([self.nbIPs(int(x.split("/")[1])) for x in list(finalCounter)])
+        for origAS, counter in self.counter["origas"].iteritems():
+            for asn, subCounter in counter["path_tracker"].iteritems():
+                for peerip, finalCounter in subCounter.iteritems():
+                    self.counter["origas"][origAS]["asn_backup"][asn][peerip] = sum([self.nbIPs(int(x.split("/")[1])) for x in list(finalCounter)])
 
     def incTotalCount(self, count, peerip, origAS, zAS):
         """Increment the number of ip seen by peerip in total and per origAS."""
@@ -184,6 +206,17 @@ class pathCounter(threading.Thread):
             # assert self.counter["all"]["asn"][asn][peerip] >= 0
             # assert self.counter["origas"][origAS]["asn"][asn][peerip] >= 0
 
+    def incCount4Backup(self, prefix, peerip, origAS, asns, add=True): #b
+        if add:
+            for asn in asns:
+                self.counter["all"]["path_tracker"][asn][peerip].add(prefix)
+                self.counter["origas"][origAS]["path_tracker"][asn][peerip].add(prefix)
+        else:
+            for asn in asns:
+                # if prefix in self.counter["all"]["path_tracker"][asn][peerip]:
+                self.counter["all"]["path_tracker"][asn][peerip].remove(prefix)
+                # if prefix in self.counter["origas"][origAS]["path_tracker"][asn][peerip]:
+                self.counter["origas"][origAS]["path_tracker"][asn][peerip].remove(prefix)
 
     def readrib(self):
         stream = None
@@ -283,6 +316,7 @@ class pathCounter(threading.Thread):
                     # assert count >= 0
                     node.data[zOrig]["count"] = count
 
+
                     # Update above nodes
                     parent = self.findParent(node, zOrig)
                     if not parent is None:
@@ -303,7 +337,8 @@ class pathCounter(threading.Thread):
                 asns = node.data[zOrig]["path"]
                 self.incTotalCount(count, zOrig, origAS, zAS)
                 self.incCount(count, zOrig, origAS, zAS, asns)
-            
+                self.incCount4Backup(zPfx, zOrig, origAS, set(path)) #b
+
                 elem = rec.get_next_elem()
 
     def readupdates(self):
@@ -419,6 +454,11 @@ class pathCounter(threading.Thread):
                             self.incCount(-1,  zOrig, origAS, zAS, asns)
                             self.incTotalCount(-1,  zOrig, origAS, zAS)
 
+                        self.incCount4Backup(zPfx, zOrig, origAS, asns, False) #b
+
+                        if self.updateQueue is not None:
+                            self.updateQueue.put(zAS, (asns, None) ) #b
+
                         del node.data[zOrig]
             
                 else:
@@ -438,12 +478,17 @@ class pathCounter(threading.Thread):
                         elem = rec.get_next_elem()
                         continue
                     
-                    if self.announceQueue is not None:
-                        self.announceQueue.put( (zDt, zOrig, zAS, zPfx, path) )
+                    # if self.updateQueue is not None:
+                    #     self.updateQueue.put((zDt, zOrig, zAS, zPfx, path))
 
                     # Announce:
                     if node is None or not zOrig in node.data :
                         # Add a new node 
+
+                        self.incCount4Backup(zPfx, zOrig, origAS, set(path)) #b
+
+                        if self.updateQueue is not None:
+                            self.updateQueue.put(zAS, (None, set(path)) ) #b
 
                         node = self.rtree.add(zPfx)
                         if self.spatialResolution:
@@ -494,12 +539,17 @@ class pathCounter(threading.Thread):
                         asns = node.data[zOrig]["path"]
                         self.incCount(-count,  zOrig, porigAS, zAS, asns)
                         self.incTotalCount(-count,  zOrig, porigAS, zAS)
+                        self.incCount4Backup(zPfx, zOrig, porigAS, asns, False) #b
+
+                        if self.updateQueue is not None:
+                            self.updateQueue.put(zAS, (asns, set(path)) ) #b
 
                         node.data[zOrig]["path"] = set(path)
                         node.data[zOrig]["origAS"] = origAS
                         asns = node.data[zOrig]["path"]
                         self.incCount(count,  zOrig, origAS, zAS, asns)
                         self.incTotalCount(count,  zOrig, origAS, zAS)
+                        self.incCount4Backup(zPfx, zOrig, origAS, asns) #b
 
                 elem = rec.get_next_elem()
 

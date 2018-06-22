@@ -96,7 +96,7 @@ ribQueue = None
 countQueue = Queue.Queue(10)
 hegemonyQueue = Queue.Queue(60000)
 saverQueue = mpQueue(10000)
-announceQueue = None
+updateQueue = None
 nbGM = N/2 
 pipeGM = []
 for i in range(nbGM):
@@ -112,22 +112,22 @@ if writeASGraph:
 gm = []
 pm = None
 if nbGM:
-    announceQueue = Queue.Queue(5000)
+    updateQueue = Queue.Queue(5000)
     hegemonyQueuePM = Queue.Queue(60000)
     for i in range(nbGM):
         gm.append( Process(target=graphMonitor.graphMonitor, args=(pipeGM[i][0], N, M, distThresh, minVoteRatio, saverQueue), name="GM%s" % i ))
-    pm = pathMonitor.pathMonitor(hegemonyQueuePM, announceQueue, saverQueue=saverQueue)
+    # pm = pathMonitor.pathMonitor(hegemonyQueuePM, updateQueue, saverQueue=saverQueue)
 
 outlierDetection = False
 if outlierDetection:
     pipeOD = mpPipe(False)
     od = Process(target=outlierDetection.outlierDetection, args=(pipeOD[0], 3.0, 5), name="OD")
 
-pc = pathCounter.pathCounter(starttime, endtime, announceQueue, countQueue,
-        ribQueue, spatialResolution=spatial, af=af, 
-         timeWindow=window, collectors=collector, excludedPeers=excludedPeers, 
-         includedPeers=includedPeers, includedOrigins=includedOrigins, 
-         excludedOrigins=excludedOrigins, onlyFullFeed=onlyFullFeed, txtFile=inputFile)
+pc = pathCounter.pathCounter(starttime, endtime, updateQueue, countQueue,
+                             ribQueue, spatialResolution=spatial, af=af,
+                             timeWindow=window, collectors=collector, excludedPeers=excludedPeers,
+                             includedPeers=includedPeers, includedOrigins=includedOrigins,
+                             excludedOrigins=excludedOrigins, onlyFullFeed=onlyFullFeed, txtFile=inputFile)
 ash = asHegemony.asHegemony(countQueue, hegemonyQueue, alpha=alpha, saverQueue=saverQueue)
 
 saverQueuePostgre = None
@@ -180,8 +180,8 @@ while pc.isAlive() or (not hegemonyQueue.empty()) or (not countQueue.empty()):
         pass
 
 logging.debug("Outside the main loop")
-if announceQueue is not None:
-    announceQueue.join()
+if updateQueue is not None:
+    updateQueue.join()
 countQueue.join()
 logging.debug("Waiting for saver module")
 saverQueue.join()

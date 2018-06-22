@@ -14,6 +14,7 @@ def asHegemonyMetric( param ):
 
     # # logging.debug("(AS hegemony) computing hegemony for graph %s" % asn)
     asHege = defaultdict(float)
+    asHege_backup = defaultdict(float) #b
     # peersTotalCount = {p:float(counter["total"][p]) for p in peers if counter["total"][p]>0}
     peerASNTotalCount = {pasn:float(sum([counter["total"][p] for p in peers ])) for pasn, peers in peersPerASN.iteritems() }
 
@@ -25,17 +26,20 @@ def asHegemonyMetric( param ):
 
         # Compute betweenness centrality for each peer ASN 
         allScores = [sum([counter["asn"][asn][p] for p in peers])/peerASNTotalCount[pasn] if peerASNTotalCount[pasn] > 0 else 0 for pasn, peers in peersPerASN.iteritems() ]
+        allScores_backup = [sum([counter["asn_backup"][asn][p] for p in peers])/peerASNTotalCount[pasn] if peerASNTotalCount[pasn] > 0 else 0 for pasn, peers in peersPerASN.iteritems()] #b
         
         # Adaptively filter low/high betweenness centrality scores
         hege = float(stats.trim_mean(allScores, alpha))
+        hege_backup = float(stats.trim_mean(allScores_backup, alpha)) - hege #b
 
         # # Ignore ASN with hegemony = 0
         # This is useful for having a smaller db file, so it should be done
         # there
 
         asHege[asn] = hege
+        asHege_backup[asn] = hege_backup #b
 
-    return scope, asHege 
+    return scope, asHege, asHege_backup #b
 
 
 class asHegemony(threading.Thread):
@@ -75,13 +79,15 @@ class asHegemony(threading.Thread):
                 self.hegemonyQueue.put( (ts, hege[0], hege[1]) )
                 if not self.saverQueue is None:
                     self.saverQueue.put( ("hegemony", (ts, hege[0], hege[1])) )
+                    self.saverQueue.put( ("hegemony_backup", (ts, hege[0], hege[2]))) #b
 
             # AS hegemony for the global graph
             logging.debug("(AS hegemony) making global graph hegemony")
-            _, asHege = asHegemonyMetric( (("all", counts["all"]), peersPerASN, self.alpha) )
+            _, asHege, asHege_backup = asHegemonyMetric( (("all", counts["all"]), peersPerASN, self.alpha) ) #b
             self.hegemonyQueue.put( (ts, "all", asHege) )
             if not self.saverQueue is None:
                 self.saverQueue.put( ("hegemony", (ts, 0, asHege)) )
+                self.saverQueue.put( ("hegemony_backup", (ts, 0, asHege_backup))) #b
 
             if not self.saverQueue is None:
                 self.saverQueue.put("COMMIT;")

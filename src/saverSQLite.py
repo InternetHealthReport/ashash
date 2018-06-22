@@ -15,6 +15,7 @@ class saverSQLite(object):
         self.saverChain = saverChain
         self.expid = None
         self.prevts = -1
+        self.prevts2 = -1 #b
 
         self.run()
 
@@ -41,6 +42,12 @@ class saverSQLite(object):
         self.cursor.execute("CREATE TABLE IF NOT EXISTS hegemony (ts integer, scope integer, asn integer, hege real, expid integer, foreign key(expid) references experiment(id))")
         self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_ts ON hegemony (ts)")
         self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_scope ON hegemony (scope)")
+
+        # Table storing computed hegemony_backup scores #b
+        self.cursor.execute(
+            "CREATE TABLE IF NOT EXISTS hegemonyBackup (ts integer, scope integer, asn integer, hegeBackup real, expid integer, foreign key(expid) references experiment(id))")
+        self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_ts ON hegemonyBackup (ts)")
+        self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_scope ON hegemonyBackup (scope)")
 
         # Table storing anomalous graph changes
         self.cursor.execute("CREATE TABLE IF NOT EXISTS graphchange (ts integer, scope integer, asn integer, nbvote integer, diffhege real, expid integer, foreign key(expid) references experiment(id))")
@@ -78,6 +85,16 @@ class saverSQLite(object):
             
             self.cursor.executemany("INSERT INTO hegemony(ts, scope, asn, hege, expid) VALUES (?, ?, ?, ?, ?)", [(ts, scope, k, v, self.expid) for k,v in hege.iteritems() if v!=0 ] )
                     # zip([ts]*len(hege), [scope]*len(hege), hege.keys(), hege.values(), [self.expid]*len(hege)) )
+
+        elif t == "hegemony_backup":
+            ts, scope, hegeBackup = data
+
+            if self.prevts2 != ts:
+                self.prevts2 = ts
+                logging.debug("start recording hegemonyBackup")
+
+            self.cursor.executemany("INSERT INTO hegemonyBackup(ts, scope, asn, hegeBackup, expid) VALUES (?, ?, ?, ?, ?)",
+                                    [(ts, scope, k, v, self.expid) for k, v in hegeBackup.iteritems() if v != 0])
 
         elif t == "graphchange":
             self.cursor.execute("INSERT INTO graphchange(ts, scope, asn, nbvote, diffhege, expid) VALUES (?, ?, ?, ?, ?, ?)", data+[self.expid])
