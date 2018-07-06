@@ -99,8 +99,8 @@ saverQueue = mpQueue(10000)
 announceQueue = None
 nbGM = N/2 
 pipeGM = []
-for i in range(nbGM):
-    pipeGM.append(mpPipe(False))
+# for i in range(nbGM):
+    # pipeGM.append(mpPipe(False))
 
 
 # Analysis Modules
@@ -114,8 +114,8 @@ pm = None
 if nbGM:
     announceQueue = Queue.Queue(5000)
     hegemonyQueuePM = Queue.Queue(60000)
-    for i in range(nbGM):
-        gm.append( Process(target=graphMonitor.graphMonitor, args=(pipeGM[i][0], N, M, distThresh, minVoteRatio, saverQueue), name="GM%s" % i ))
+    # for i in range(nbGM):
+        # gm.append( Process(target=graphMonitor.graphMonitor, args=(pipeGM[i][0], N, M, distThresh, minVoteRatio, saverQueue), name="GM%s" % i ))
     pm = pathMonitor.pathMonitor(hegemonyQueuePM, announceQueue, saverQueue=saverQueue)
 
 outlierDetection = False
@@ -168,10 +168,10 @@ while pc.isAlive() or (not hegemonyQueue.empty()) or (not countQueue.empty()):
                 ag.saveGraph(output+"asgraph_%s.txt" % starttime)
         # logging.debug("(main) dispatching hegemony %s" % elem[1])
         if nbGM:
-            if elem[1] == "all":
-                pipeGM[0][1].send( elem )
-            else:
-                pipeGM[int(elem[1])%nbGM][1].send( elem )
+            # if elem[1] == "all":
+                # pipeGM[0][1].send( elem )
+            # else:
+                # pipeGM[int(elem[1])%nbGM][1].send( elem )
                 hegemonyQueuePM.put( elem )
         if outlierDetection:
             pipeOD[1].send( elem )
