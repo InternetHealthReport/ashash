@@ -10,12 +10,12 @@ from  more_itertools import unique_justseen
 
 class pathMonitor(threading.Thread):
 
-    def __init__(self, hegemonyQueue, announceQueue, saverQueue=None):
+    def __init__(self, hegemonyQueue, updateQueue, saverQueue=None):
         threading.Thread.__init__(self)
 
         self.setName("Path Monitor")
         self.hegemonyQueue = hegemonyQueue
-        self.announceQueue = announceQueue
+        self.updateQueue = updateQueue
         self.hegemony = dict()
         self.daemon = True
         self.saverQueue = saverQueue
@@ -33,9 +33,9 @@ class pathMonitor(threading.Thread):
                 pass
 
             try:
-                msg = self.announceQueue.get_nowait()
+                msg = self.updateQueue.get_nowait()
                 self.detectValley(msg)
-                self.announceQueue.task_done()
+                self.updateQueue.task_done()
             except Queue.Empty:
                 pass
 

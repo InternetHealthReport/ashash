@@ -36,10 +36,10 @@ def asHegemonyMetric( param ):
         # This is useful for having a smaller db file, so it should be done
         # there
 
-        asHege[asn] = hege
-        asHege_backup[asn] = hege_backup #b
+        asHege[asn] = (hege, hege_backup)
+        # asHege_backup[asn] = hege_backup #b
 
-    return scope, asHege, asHege_backup #b
+    return scope, asHege #b
 
 
 class asHegemony(threading.Thread):
@@ -78,16 +78,18 @@ class asHegemony(threading.Thread):
                 # logging.debug("(AS hegemony) send hegemony results %s" % hege[0])
                 self.hegemonyQueue.put( (ts, hege[0], hege[1]) )
                 if not self.saverQueue is None:
-                    self.saverQueue.put( ("hegemony", (ts, hege[0], hege[1])) )
-                    self.saverQueue.put( ("hegemony_backup", (ts, hege[0], hege[2]))) #b
+                    self.saverQueue.put(("hegemony", (ts, hege[0], hege[1])))
+                    # self.saverQueue.put( ("hegemony", (ts, hege[0], hege[1])) )
+                    # self.saverQueue.put( ("hegemony_backup", (ts, hege[0], hege[2]))) #b
 
             # AS hegemony for the global graph
             logging.debug("(AS hegemony) making global graph hegemony")
-            _, asHege, asHege_backup = asHegemonyMetric( (("all", counts["all"]), peersPerASN, self.alpha) ) #b
+            _, asHege = asHegemonyMetric( (("all", counts["all"]), peersPerASN, self.alpha) ) #b
             self.hegemonyQueue.put( (ts, "all", asHege) )
             if not self.saverQueue is None:
-                self.saverQueue.put( ("hegemony", (ts, 0, asHege)) )
-                self.saverQueue.put( ("hegemony_backup", (ts, 0, asHege_backup))) #b
+                self.saverQueue.put(("hegemony", (ts, 0, asHege)))
+                # self.saverQueue.put( ("hegemony", (ts, 0, asHege)) )
+                # self.saverQueue.put( ("hegemony_backup", (ts, 0, asHege_backup))) #b
 
             if not self.saverQueue is None:
                 self.saverQueue.put("COMMIT;")

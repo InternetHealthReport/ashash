@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import os
 from matplotlib import pylab as plt
 import itertools
@@ -263,14 +265,82 @@ class Plotter(object):
         # plt.tight_layout()
         plt.savefig(filename)
 
+    def backupHegeECDFGraph(self, fig, scope):
+        ax = fig.add_subplot(121)
+        # data = self.avgData("SELECT asn, hegeB FROM hegemony WHERE ts=%d AND scope=0 AND expid=1"%scope)
+        data = self.avgData("SELECT asn, hegeB FROM hegemony WHERE ts=0 AND scope<>%d AND expid=1" % scope)
+        yval = eccdf(data.values(), label="Global graph", ax=ax)
+        ax.set_title("backupHegeECDFGraph")
+        ax.set_xlabel("AS backup hegemony")
+        ax.set_ylabel("CCDF")
+        # plt.xscale("log")
+        ax.set_yscale("log")
+        # ax.set_xlim(-0.02, 0.5)
+        # ax.set_ylim(10e-6, 1.1)
 
+    def hegeBHegeScatterGraph(self, fig, scope):
+        ax = fig.add_subplot(122)
+        # data = self.avgData("SELECT hege, hegeB FROM hegemony WHERE ts=0 AND scope=0 AND expid=1")
+        data = self.cursor[0].execute("SELECT hegeB, hege FROM hegemony WHERE ts=0 AND scope=%d AND expid=1"%scope).fetchall()
+        data = self.cursor[0].execute(
+            "SELECT hegeB, hege FROM hegemony WHERE ts=0 AND scope<>%d AND expid=1" % scope).fetchall()
+        ax.set_title("hegebackup_to_hegeScatterGraph")
+        ax.set_xlabel("AS backup hegemony")
+        ax.set_ylabel("AS hegemony")
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+        # ax.set_xlim(0.00001, 0.15) #global
+        # ax.set_ylim(0.00001, 0.3) #global
+        ax.scatter([x[0] for x in data], [x[1] for x in data], c='r', marker='x')
+
+    def plotBackupTest(self, scope):
+        fig = plt.figure()
+        self.backupHegeECDFGraph(fig, scope)
+        self.hegeBHegeScatterGraph(fig, scope)
+        fig.tight_layout()
+        plt.legend()
+        plt.savefig("backupAnalysisTest_%d"%scope)
+
+    def hegeMinusBHege(self, scope):
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        # data = self.cursor[0].execute("SELECT hegeB, hege FROM hegemony WHERE ts=0 AND scope=%d AND expid=1"%scope).fetchall()
+        # data = self.cursor[0].execute(
+        #     "SELECT hegeB, hege FROM hegemony WHERE ts=0 AND scope<>%d AND expid=1" % scope).fetchall()
+        data = self.cursor[0].execute(
+            "SELECT hegeB, hege FROM hegemony WHERE ts=0 AND scope IN (SELECT scope WHERE scope=asn AND hegeB<>0) AND expid=1 AND scope<>asn").fetchall()
+        ecdf([(x[1]-x[0]) for x in data], label="hegeMinusBHege", ax=ax)
+        ax.set_yscale("log")
+        fig.savefig("hegeMinusBHege_%d"%scope)
+
+    def explorer(self):
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        data = self.cursor[0].execute(
+            "SELECT asn, hege, hegeB FROM hegemony WHERE ts=0 AND scope IN(SELECT scope FROM hegemony WHERE scope=asn AND hegeB<>0) AND expid=1 AND scope<>asn").fetchall()
+        data = list(data)
+        print(len(data))
+        sorted(data, key=lambda x:(x[1]*(x[2]-x[1])), reverse=True)
+        with open("./explorer.txt", mode="w+") as output:
+            output.write("\n".join([str(x[0]) for x in data]))
+        ax.set_yscale("log")
+        ecdf([x[1]*(x[2]-x[1]) for x in data], label="Explorer", ax=ax)
+        fig.savefig("Explorer")
+
+    def sqlTest(self):
+        data = self.cursor[0].execute("SELECT scope FROM hegemony WHERE scope=asn AND hegeB<>0").fetchall()
+        print(len(data))
 
 if __name__ == "__main__":
     # plot everything
-    pr = Plotter(db="results/results_@bgpstream:1152914400,1152928800.sql")
+    # pr = Plotter(db="results/results_@bgpstream:1152914400,1152928800.sql")
 
     # pr.hegemonyDistLocalGraph()
-    pr.hegemonyDistGlobalGraph()
+    # pr.hegemonyDistGlobalGraph()
     # pr.nbNodeDistLocalGraph()
-
-
+    pr = Plotter(db="../../Comcast_20171107_rv3/results_2017-11-06 16:00:00.sql")
+    # pr.plotBackupTest(0)
+    # pr.hegeMinusBHege(0)
+    # pr.hegemonyDistGlobalGraph()
+    pr.explorer()
+    # pr.sqlTest()

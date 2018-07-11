@@ -38,16 +38,22 @@ class saverSQLite(object):
         # Table storing experiements parameters
         self.cursor.execute("CREATE TABLE IF NOT EXISTS experiment (id integer primary key, date text, cmd text, args text)")
 
-        # Table storing computed hegemony scores 
-        self.cursor.execute("CREATE TABLE IF NOT EXISTS hegemony (ts integer, scope integer, asn integer, hege real, expid integer, foreign key(expid) references experiment(id))")
+        # # Table storing computed hegemony scores
+        # self.cursor.execute("CREATE TABLE IF NOT EXISTS hegemony (ts integer, scope integer, asn integer, hege real, expid integer, foreign key(expid) references experiment(id))")
+        # self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_ts ON hegemony (ts)")
+        # self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_scope ON hegemony (scope)")
+        #
+        # # Table storing computed hegemony_backup scores #b
+        # self.cursor.execute(
+        #     "CREATE TABLE IF NOT EXISTS hegemonyBackup (ts integer, scope integer, asn integer, hegeBackup real, expid integer, foreign key(expid) references experiment(id))")
+        # self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_ts ON hegemonyBackup (ts)")
+        # self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_scope ON hegemonyBackup (scope)")
+
+        # Table storing computed hegemony scores
+        self.cursor.execute(
+            "CREATE TABLE IF NOT EXISTS hegemony (ts integer, scope integer, asn integer, hege real, hegeB real, expid integer, foreign key(expid) references experiment(id))")
         self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_ts ON hegemony (ts)")
         self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_scope ON hegemony (scope)")
-
-        # Table storing computed hegemony_backup scores #b
-        self.cursor.execute(
-            "CREATE TABLE IF NOT EXISTS hegemonyBackup (ts integer, scope integer, asn integer, hegeBackup real, expid integer, foreign key(expid) references experiment(id))")
-        self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_ts ON hegemonyBackup (ts)")
-        self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_scope ON hegemonyBackup (scope)")
 
         # Table storing anomalous graph changes
         self.cursor.execute("CREATE TABLE IF NOT EXISTS graphchange (ts integer, scope integer, asn integer, nbvote integer, diffhege real, expid integer, foreign key(expid) references experiment(id))")
@@ -76,25 +82,38 @@ class saverSQLite(object):
         if self.expid is None:
             logging.error("No experiment inserted for this data")
 
+        #TODO We should discuss if 0 should be remained in the results in the future versions, but test version should have 0 hegemony/backupHegemony
+
+        # elif t == "hegemony":
+        #     ts, scope, hege = data
+        #
+        #     if self.prevts != ts:
+        #         self.prevts = ts
+        #         logging.debug("start recording hegemony")
+        #
+        #     self.cursor.executemany("INSERT INTO hegemony(ts, scope, asn, hege, expid) VALUES (?, ?, ?, ?, ?)",
+        #                             [(ts, scope, k, v, self.expid) for k,v in hege.iteritems() ] )
+        #             # zip([ts]*len(hege), [scope]*len(hege), hege.keys(), hege.values(), [self.expid]*len(hege)) )
+        #
+        # elif t == "hegemony_backup":
+        #     ts, scope, hegeBackup = data
+        #
+        #     if self.prevts2 != ts:
+        #         self.prevts2 = ts
+        #         logging.debug("start recording hegemonyBackup")
+        #
+        #     self.cursor.executemany("INSERT INTO hegemonyBackup(ts, scope, asn, hegeBackup, expid) VALUES (?, ?, ?, ?, ?)",
+        #                             [(ts, scope, k, v, self.expid) for k, v in hegeBackup.iteritems()])
+
         elif t == "hegemony":
             ts, scope, hege = data
 
             if self.prevts != ts:
                 self.prevts = ts
                 logging.debug("start recording hegemony")
-            
-            self.cursor.executemany("INSERT INTO hegemony(ts, scope, asn, hege, expid) VALUES (?, ?, ?, ?, ?)", [(ts, scope, k, v, self.expid) for k,v in hege.iteritems() if v!=0 ] )
-                    # zip([ts]*len(hege), [scope]*len(hege), hege.keys(), hege.values(), [self.expid]*len(hege)) )
 
-        elif t == "hegemony_backup":
-            ts, scope, hegeBackup = data
-
-            if self.prevts2 != ts:
-                self.prevts2 = ts
-                logging.debug("start recording hegemonyBackup")
-
-            self.cursor.executemany("INSERT INTO hegemonyBackup(ts, scope, asn, hegeBackup, expid) VALUES (?, ?, ?, ?, ?)",
-                                    [(ts, scope, k, v, self.expid) for k, v in hegeBackup.iteritems() if v != 0])
+            self.cursor.executemany("INSERT INTO hegemony(ts, scope, asn, hege, hegeB, expid) VALUES (?, ?, ?, ?, ?, ?)",
+                                    [(ts, scope, k, v[0], v[1], self.expid) for k, v in hege.iteritems()])
 
         elif t == "graphchange":
             self.cursor.execute("INSERT INTO graphchange(ts, scope, asn, nbvote, diffhege, expid) VALUES (?, ?, ?, ?, ?, ?)", data+[self.expid])
