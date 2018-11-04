@@ -33,7 +33,7 @@ class pathCounter(threading.Thread):
             spatialResolution=1, af=4, timeWindow=900, #asnFilter=None, 
             collectors=[ "route-views.linx", "route-views3", "rrc00", "rrc10"],
             includedPeers=[], excludedPeers=[], includedOrigins=[], excludedOrigins=[], 
-            onlyFullFeed=True, txtFile=None):
+            onlyFullFeed=True, txtFile=None, prefixWeight=None):
 
         threading.Thread.__init__ (self)
         self.__nbaddr = {4:{i: 2**(32-i) for i in range(33) }, 6: {i: 2**(128-i) for i in range(129) }}
@@ -73,6 +73,7 @@ class pathCounter(threading.Thread):
                 }
 
         self.txtFile = txtFile
+        self.prefixWeight = prefixWeight
 
 
     def run(self):
@@ -114,6 +115,7 @@ class pathCounter(threading.Thread):
         else:
             return self.findParent(parent, zOrig)
 
+
     def findFullFeeds(self, threshold):
         # logging.debug("(pathCounter) finding full feed peers...")
         nbPrefixes = defaultdict(int)
@@ -128,9 +130,17 @@ class pathCounter(threading.Thread):
 
         return res
 
+
     def saveGraph(self):
         pass
+
         
+    def path_weight(self, zPfx):
+        if self.prefixWeight:
+            return self.prefixWeight[zPfx]
+        else:
+            return 1
+
 
     def cleanUnusedCounts(self):
 
@@ -297,7 +307,7 @@ class pathCounter(threading.Thread):
                         self.incCount(pdiff, zOrig, pOrigAS, zAS, asns)
                         self.incTotalCount(pdiff, zOrig, pOrigAS, zAS)
                 else:
-                    count = 1
+                    count = self.path_weight(zPfx)
                     node.data[zOrig]["count"] = count
 
                 asns = node.data[zOrig]["path"]
@@ -305,6 +315,7 @@ class pathCounter(threading.Thread):
                 self.incCount(count, zOrig, origAS, zAS, asns)
             
                 elem = rec.get_next_elem()
+
 
     def readupdates(self):
         #TODO implement txt file for update messages?
@@ -416,8 +427,9 @@ class pathCounter(threading.Thread):
 
                         else: 
                             asns = node.data[zOrig]["path"]
-                            self.incCount(-1,  zOrig, origAS, zAS, asns)
-                            self.incTotalCount(-1,  zOrig, origAS, zAS)
+                            count = self.path_weight(zPfx)
+                            self.incCount(-count,  zOrig, origAS, zAS, asns)
+                            self.incTotalCount(-count,  zOrig, origAS, zAS)
 
                         del node.data[zOrig]
             
@@ -475,8 +487,8 @@ class pathCounter(threading.Thread):
                                 self.incTotalCount(pdiff, zOrig, porigAS, zAS)
 
                         else:
-                            self.incTotalCount(1,  zOrig, origAS, zAS)
-                            count = 1
+                            count = self.path_weight(zPfx)
+                            self.incTotalCount(count,  zOrig, origAS, zAS)
                             # Update the ASes counts
                             node.data[zOrig] = {"path": set(path), "count": count, "origAS": origAS}
                             asn = node.data[zOrig]["path"]
@@ -488,7 +500,7 @@ class pathCounter(threading.Thread):
                         if self.spatialResolution:
                             count = node.data[zOrig]["count"]
                         else:
-                            count = 1
+                            count = self.path_weight(zPfx)
 
                         porigAS = node.data[zOrig]["origAS"]
                         asns = node.data[zOrig]["path"]

@@ -30,6 +30,13 @@ The plot is available in the ./Comcast_20171107_rv3/ folder, and should look lik
 
 The bump in Level(3) hegemony (AS3356) at 18:00 UTC reveals the BGP route leak that lasted for about 90 minutes.
 
+
+## Configuration file
+More options are available using the configuration file. For example, the
+configuration file allows to select only certain vantage points or certain
+prefixes to monitor.
+See conf/default.ini for an example.
+
 ## Reading local text files
 
 ### File Format
@@ -47,6 +54,7 @@ For example:
 ```
 python2 src/ashash.py -o ./testTXT/ -f data/uniTokyo_20151010.data 2018-01-01T00:00 2018-01-01T00:00
 ```
+
 
 ### Limitations
 - For now the filters are not implemented for text inputs. You should filter out by yourself undesirable data before executing ashash.

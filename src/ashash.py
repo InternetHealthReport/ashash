@@ -7,6 +7,7 @@ import errno
 from collections import deque
 from datetime import datetime
 import Queue
+import json
 from multiprocessing import Pipe as mpPipe
 from multiprocessing import JoinableQueue as mpQueue
 from multiprocessing import Process
@@ -66,6 +67,8 @@ excludedPeers = [x.strip() for x in config_parser.get("peers","exclude",False,ar
 onlyFullFeed = bool(int(config_parser.get("peers","onlyfullfeed")))
 af = int(config_parser.get("origins","af",False,argsDict))
 spatial = int(config_parser.get("origins","spatial",False,argsDict))
+weights = config_parser.get("origins","weights",False,argsDict)
+if weights: weights = json.loads(weights)
 includedOrigins = [x.strip() for x in config_parser.get("origins","include",False,argsDict).split(",") if x.strip() != ""]  
 excludedOrigins = [x.strip() for x in config_parser.get("origins","exclude",False,argsDict).split(",") if x.strip() != ""]
 alpha = float(config_parser.get("hegemony","alpha",False,argsDict))
@@ -127,7 +130,8 @@ pc = pathCounter.pathCounter(starttime, endtime, announceQueue, countQueue,
         ribQueue, spatialResolution=spatial, af=af, 
          timeWindow=window, collectors=collector, excludedPeers=excludedPeers, 
          includedPeers=includedPeers, includedOrigins=includedOrigins, 
-         excludedOrigins=excludedOrigins, onlyFullFeed=onlyFullFeed, txtFile=inputFile)
+         excludedOrigins=excludedOrigins, onlyFullFeed=onlyFullFeed, 
+         txtFile=inputFile, prefixWeight=weights)
 ash = asHegemony.asHegemony(countQueue, hegemonyQueue, alpha=alpha, saverQueue=saverQueue)
 
 saverQueuePostgre = None
