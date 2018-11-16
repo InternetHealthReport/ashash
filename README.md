@@ -41,7 +41,7 @@ See conf/default.ini for an example.
 
 ### File Format
 Instead of getting data from BGPStream you can also provide your own BGP data in a text file.
-For now the file should have no header and the format should similar to libBGPdump output, that is:
+For now the file should have no header and the format should be similar to libBGPdump output, that is:
 ```
 BGP version|message time|message type|peer IP address|peer ASN|prefix|AS path|origin|next hop|local preferences|MED|communities| aggregate ID|aggregate IP 
 ```
