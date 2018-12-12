@@ -6,7 +6,7 @@ from multiprocessing import Pool
 import itertools
 
 def asHegemonyMetric( param ): 
-    (scope, counter), peersPerASN, alpha = param
+    (scope, counter), peersPerASN, alpha, forceTrim = param
 
     if scope.startswith("{"):
         #TODO handle set origins
@@ -27,7 +27,12 @@ def asHegemonyMetric( param ):
         allScores = [sum([counter["asn"][asn][p] for p in peers])/peerASNTotalCount[pasn] if peerASNTotalCount[pasn] > 0 else 0 for pasn, peers in peersPerASN.iteritems() ]
         
         # Adaptively filter low/high betweenness centrality scores
-        hege = float(stats.trim_mean(allScores, alpha))
+        peerShare = 1.0/len(allScores)
+        if peerShare>alpha and forceTrim:
+            # Force trimming: Remove the top and bottom peer 
+            hege = float(stats.trim_mean(allScores, peerShare))
+        else:
+            hege = float(stats.trim_mean(allScores, alpha))
 
         # # Ignore ASN with hegemony = 0
         # This is useful for having a smaller db file, so it should be done
@@ -39,12 +44,13 @@ def asHegemonyMetric( param ):
 
 
 class asHegemony(threading.Thread):
-    def __init__(self, countQueue, hegemonyQueue, alpha=0.1, saverQueue=None):
+    def __init__(self, countQueue, hegemonyQueue, alpha=0.1, saverQueue=None, forceTrim=True):
         threading.Thread.__init__(self)
 
         self.countQueue = countQueue
         self.hegemonyQueue = hegemonyQueue
         self.alpha = alpha
+        self.forceTrim = forceTrim
         self.daemon = True
         self.saverQueue = saverQueue
         self.workers = Pool(10)
@@ -60,8 +66,8 @@ class asHegemony(threading.Thread):
             origAShege = []
 
             # AS hegemony for graph bound to originating AS
-            logging.debug("(AS hegemony) making local graphs hegemony")
-            params = itertools.izip(counts["origas"].iteritems(), itertools.repeat(peersPerASN), itertools.repeat(self.alpha) )
+            logging.debug("(AS hegemony) making local graphs hegemony")?!?jedi=0, ?!?                                                                        (*_*object*_*, times) ?!?jedi?!?
+            params = itertools.izip(counts["origas"].iteritems(), itertools.repeat(peersPerASN), itertools.repeat(self.alpha), itertools.repeat(self.forceTrim) )
             logging.debug("(AS hegemony) sending tasks to workers")
             for hege in self.workers.imap_unordered(asHegemonyMetric, params, 1000):
                 if prevts != ts:
