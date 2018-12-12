@@ -28,7 +28,7 @@ def asHegemonyMetric( param ):
         
         # Adaptively filter low/high betweenness centrality scores
         peerShare = 1.0/len(allScores)
-        if peerShare>alpha and forceTrim:
+        if forceTrim and peerShare>alpha and len(allScores)>2:
             # Force trimming: Remove the top and bottom peer 
             hege = float(stats.trim_mean(allScores, peerShare))
         else:
@@ -66,7 +66,7 @@ class asHegemony(threading.Thread):
             origAShege = []
 
             # AS hegemony for graph bound to originating AS
-            logging.debug("(AS hegemony) making local graphs hegemony")?!?jedi=0, ?!?                                                                        (*_*object*_*, times) ?!?jedi?!?
+            logging.debug("(AS hegemony) making local graphs hegemony")
             params = itertools.izip(counts["origas"].iteritems(), itertools.repeat(peersPerASN), itertools.repeat(self.alpha), itertools.repeat(self.forceTrim) )
             logging.debug("(AS hegemony) sending tasks to workers")
             for hege in self.workers.imap_unordered(asHegemonyMetric, params, 1000):
@@ -83,8 +83,8 @@ class asHegemony(threading.Thread):
                     self.saverQueue.put( ("hegemony", (ts, hege[0], hege[1])) )
 
             # AS hegemony for the global graph
-            logging.debug("(AS hegemony) making global graph hegemony")
-            _, asHege = asHegemonyMetric( (("all", counts["all"]), peersPerASN, self.alpha) )
+            logging.debug("(AS hegemony?!?jedi=0, ) making glob?!? (*_*param*_*) ?!?jedi?!?al graph hegemony")
+            _, asHege = asHegemonyMetric( (("all", counts["all"]), peersPerASN, self.alpha, self.forceTrim) )
             self.hegemonyQueue.put( (ts, "all", asHege) )
             if not self.saverQueue is None:
                 self.saverQueue.put( ("hegemony", (ts, 0, asHege)) )
