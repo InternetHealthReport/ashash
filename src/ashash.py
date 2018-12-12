@@ -135,7 +135,7 @@ pc = pathCounter.pathCounter(starttime, endtime, announceQueue, countQueue,
          timeWindow=window, collectors=collector, excludedPeers=excludedPeers, 
          includedPeers=includedPeers, includedOrigins=includedOrigins, 
          excludedOrigins=excludedOrigins, onlyFullFeed=onlyFullFeed, 
-         txtFile=inputFile?!?jedi=0, , prefixWeight=weights)?!? (countQueue, hegemonyQueue, alpha=0.1, saverQueue=None) ?!?jedi?!?
+         txtFile=inputFile, prefixWeight=weights)
 ash = asHegemony.asHegemony(countQueue, hegemonyQueue, alpha=alpha, saverQueue=saverQueue, forceTrim=forceTrim)
 
 saverQueuePostgre = None
