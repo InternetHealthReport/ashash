@@ -6,7 +6,7 @@ class saverSQLite(object):
 
     """Dumps variables to a SQLite database. """
 
-    def __init__(self, filename, saverQueue, saverChain):
+    def __init__(self, filename, saverQueue, saverChain, keepNullHege=False):
        
         self.filename = filename
         self.conn = apsw.Connection(filename)
@@ -15,6 +15,7 @@ class saverSQLite(object):
         self.saverChain = saverChain
         self.expid = None
         self.prevts = -1
+        self.keepNullHege = keepNullHege
 
         self.run()
 
@@ -76,7 +77,7 @@ class saverSQLite(object):
                 self.prevts = ts
                 logging.debug("start recording hegemony")
             
-            self.cursor.executemany("INSERT INTO hegemony(ts, scope, asn, hege, expid) VALUES (?, ?, ?, ?, ?)", [(ts, scope, k, v, self.expid) for k,v in hege.iteritems() if v!=0 ] )
+            self.cursor.executemany("INSERT INTO hegemony(ts, scope, asn, hege, expid) VALUES (?, ?, ?, ?, ?)", [(ts, scope, k, v, self.expid) for k,v in hege.iteritems() if v!=0 or self.keepNullHege ] )
                     # zip([ts]*len(hege), [scope]*len(hege), hege.keys(), hege.values(), [self.expid]*len(hege)) )
 
         elif t == "graphchange":

@@ -42,6 +42,7 @@ parser.add_argument("-s", "--spatial", help="spatial resolution (0 for prefix, 1
 parser.add_argument("-w", "--window", help="Time window: time resolution in seconds", type=str)
 parser.add_argument("-o", "--output", help="output directory")
 parser.add_argument("-f", "--inputFile", help="txt input file", type=str)
+parser.add_argument("-n", "--keepNullHege", help="Record AS with hegemony equal to zero (discarded by default)" )
 parser.add_argument("starttime", help="UTC start time, e.g. 2017-10-17T00:00 (should correspond to a date and time when RIB files are available)",  type=str)
 parser.add_argument("endtime", help="UTC end time", type=str)
 args = parser.parse_args()
@@ -80,6 +81,7 @@ minVoteRatio = float(config_parser.get("detection","minVoteRatio",False,argsDict
 output = config_parser.get("output","output",False,argsDict)
 writeASGraph = bool(int(config_parser.get("output","asGraph",False,argsDict)))
 postgre = bool(int(config_parser.get("output","postgre",False,argsDict)))
+keepNullHege = bool(int(config_parser.get("output","keepNullHege",False,argsDict)))
 
 try:
     os.makedirs(os.path.dirname(output))
@@ -143,7 +145,7 @@ if postgre:
     sp.start()
 
 sqldb = output+"results_%s.sql" % starttime
-ss = Process(target=saverSQLite.saverSQLite, args=(sqldb, saverQueue, saverQueuePostgre), name="saverSQLite")
+ss = Process(target=saverSQLite.saverSQLite, args=(sqldb, saverQueue, saverQueuePostgre, keepNullHege), name="saverSQLite")
 ss.start()
 saverQueue.put(("experiment", [datetime.now(), str(sys.argv), str(args)]))
 
