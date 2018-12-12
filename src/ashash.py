@@ -31,6 +31,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("-C","--config_file", help="Get all parameters from the specified config file", type=str, default="conf/default.ini")
 parser.add_argument("-a","--af", help="address family (4, 6)", type=str)
 parser.add_argument("--alpha", help="Alpha values for AS hegemony", type=str)
+parser.add_argument("--forceTrim", help="Trim top and bottom value in case of small number of peers where each peer % > alpha")
 parser.add_argument("-c","--collector", help="BGP collectors. e.g. route-views.linx,rrc00", type=str)
 parser.add_argument("-N", help="number of hash functions for sketching", type=str) #16
 parser.add_argument("-M", help="number of sketches per hash function", type=str)
@@ -72,6 +73,7 @@ if weights: weights = json.loads(weights)
 includedOrigins = [x.strip() for x in config_parser.get("origins","include",False,argsDict).split(",") if x.strip() != ""]  
 excludedOrigins = [x.strip() for x in config_parser.get("origins","exclude",False,argsDict).split(",") if x.strip() != ""]
 alpha = float(config_parser.get("hegemony","alpha",False,argsDict))
+forceTrim = bool(int(config_parser.get("hegemony","forceTrim",False,argsDict)))
 window = int(config_parser.get("hegemony","window",False,argsDict))
 N = int(config_parser.get("detection","N",False,argsDict))
 M = int(config_parser.get("detection","M",False,argsDict))
@@ -131,8 +133,8 @@ pc = pathCounter.pathCounter(starttime, endtime, announceQueue, countQueue,
          timeWindow=window, collectors=collector, excludedPeers=excludedPeers, 
          includedPeers=includedPeers, includedOrigins=includedOrigins, 
          excludedOrigins=excludedOrigins, onlyFullFeed=onlyFullFeed, 
-         txtFile=inputFile, prefixWeight=weights)
-ash = asHegemony.asHegemony(countQueue, hegemonyQueue, alpha=alpha, saverQueue=saverQueue)
+         txtFile=inputFile?!?jedi=0, , prefixWeight=weights)?!? (countQueue, hegemonyQueue, alpha=0.1, saverQueue=None) ?!?jedi?!?
+ash = asHegemony.asHegemony(countQueue, hegemonyQueue, alpha=alpha, saverQueue=saverQueue, forceTrim=forceTrim)
 
 saverQueuePostgre = None
 if postgre:
