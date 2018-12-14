@@ -1,13 +1,20 @@
 # ASHash
 
 ## Requirements
-You will need to install the following python libraries to use this code:
-
 - Python 2.7
-- py-radix: https://pypi.python.org/pypi/py-radix
 - pybgpstream v1.2: https://github.com/caida/bgpstream
-- apsw: https://pypi.python.org/pypi/apsw
+- pip (to install required python libraries)
 
+## Installation
+Get the latest source files:
+```
+git clone git@github.com:InternetHealthReport/ashash.git
+```
+Install dependencies and install raclette:
+```
+cd ashash
+sudo pip install -r requirements.txt 
+```
 ## Example
 As an example, we look at AS hegemony changes during the Comcast outage caused by Level(3) BGP route leak on Nov. 6th, 2017.
 
