@@ -83,7 +83,7 @@ class asHegemony(threading.Thread):
                     self.saverQueue.put( ("hegemony", (ts, hege[0], hege[1])) )
 
             # AS hegemony for the global graph
-            logging.debug("(AS hegemony?!?jedi=0, ) making glob?!? (*_*param*_*) ?!?jedi?!?al graph hegemony")
+            logging.debug("(AS hegemony) making global graph hegemony")
             _, asHege = asHegemonyMetric( (("all", counts["all"]), peersPerASN, self.alpha, self.forceTrim) )
             self.hegemonyQueue.put( (ts, "all", asHege) )
             if not self.saverQueue is None:

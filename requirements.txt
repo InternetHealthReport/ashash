@@ -3,3 +3,4 @@ apsw
 py-radix
 scipy
 numpy
+networkx
