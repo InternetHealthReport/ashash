@@ -4,3 +4,4 @@ py-radix
 scipy
 numpy
 networkx
+mmh3
