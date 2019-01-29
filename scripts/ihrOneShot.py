@@ -33,12 +33,12 @@ cmd = 'python2 src/ashash.py -a %s -s %s -w 900 -p 1 -o %s %s %s' % (
         af, spatialResolution, tmp_dir, dateStart, dateEnd)
 
 print dateStart
-rmcmd = """ psql -U romain -d ihr -c \
+rmcmd = """ psql -h 127.0.0.1 -U romain -d ihr -c \
         "DELETE from ihr_hegemony where timebin>='%s' and timebin<='%s'" """ \
         % (dateStart, dateEnd)
 print(rmcmd)
 os.system(rmcmd)
-rmcmd = """ psql -U romain -d ihr -c \
+rmcmd = """ psql -h 127.0.0.1 -U romain -d ihr -c \
         "DELETE from ihr_hegemonycone where timebin>='%s' and timebin<='%s'" """\
         % (dateStart, dateEnd)
 print(rmcmd)
