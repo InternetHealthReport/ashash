@@ -11,7 +11,7 @@ if len(sys.argv)<4:
 
 years = range(int(sys.argv[2]), int(sys.argv[3])+1)
 months = range(1,13)
-days = [15]
+days = [4,11,18,25] #1,8,15,22
 
 af = int(sys.argv[1])
 
@@ -28,11 +28,21 @@ print "IPv%s, spatial resolution=%s" % (af, spatialResolution)
 for ye in years:
     for mo in months:
         for da in days:
-            date = "%s-%s-%sT00:00" % (ye,mo,da) 
+            cmd = "python2 scripts/ihrOneShot.py {} {} {} {}".format(af, ye, mo, da)
+            print(cmd)
+            os.system(cmd)
 
-            print date
-            print('python2 src/ashash.py -a %s -s %s -g -w 900 -o newResults%s/ %s %s' % (af, spatialResolution, af, date, date))
-            if not os.path.exists("@psql/asgraph_%s.txt" % (date)):
-                os.system('python2 src/ashash.py -a %s -s %s -g -w 900 -o newResults%s/ %s %s' % (af, spatialResolution, af, date, date))
-            else:
-                print("skipping this one")
+
+
+
+            # cmd = 'python2 src/ashash.py -a %s -s %s -w 900 -p 1 -o /ssd/ashash/oneRibPerMonth/ %s %s' % (af, spatialResolution, dateStart, dateEnd)
+
+            # print dateStart
+            # rmcmd = """ psql -U romain -d ihr -c "DELETE from ihr_hegemony where timebin>='%s' and timebin<='%s'" """ % (dateStart, dateEnd)
+            # print(rmcmd)
+            # os.system(rmcmd)
+            # rmcmd = """ psql -U romain -d ihr -c "DELETE from ihr_hegemonycone where timebin>='%s' and timebin<='%s'" """ % (dateStart, dateEnd)
+            # print(rmcmd)
+            # os.system(rmcmd)
+            # print(cmd)
+            # os.system(cmd)
