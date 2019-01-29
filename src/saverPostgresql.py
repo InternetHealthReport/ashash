@@ -46,7 +46,7 @@ class saverPostgresql(object):
 
             conn_string = "host='127.0.0.1' port='%s' dbname='%s'" % (local_port, dbname)
         else:
-            conn_string = "dbname='%s'" % dbname
+            conn_string = "host='127.0.0.1' dbname='%s'" % dbname
 
         self.conn = psycopg2.connect(conn_string)
         columns=("timebin", "originasn_id", "asn_id", "hege", "af")
