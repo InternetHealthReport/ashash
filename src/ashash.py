@@ -70,7 +70,8 @@ onlyFullFeed = bool(int(config_parser.get("peers","onlyfullfeed")))
 af = int(config_parser.get("origins","af",False,argsDict))
 spatial = int(config_parser.get("origins","spatial",False,argsDict))
 weights = config_parser.get("origins","weights",False,argsDict)
-if weights: weights = json.loads(weights)
+if weights: 
+    weights = json.loads(weights)
 includedOrigins = [x.strip() for x in config_parser.get("origins","include",False,argsDict).split(",") if x.strip() != ""]  
 excludedOrigins = [x.strip() for x in config_parser.get("origins","exclude",False,argsDict).split(",") if x.strip() != ""]
 alpha = float(config_parser.get("hegemony","alpha",False,argsDict))

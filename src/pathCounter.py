@@ -219,8 +219,10 @@ class pathCounter(threading.Thread):
             for p in self.includedPeers:
                 bgprFilter += " and peer %s " % p
 
-            for p in self.includedPrefix:
-                bgprFilter += " and prefix more %s " % p
+            # Filter when reading data (because it doesn't work with too many
+            # prefixes)
+            # for p in self.includedPrefix:
+                # bgprFilter += " and prefix more %s " % p
 
             
             logging.info("Connecting to BGPstream... (%s)" % bgprFilter)
@@ -335,6 +337,8 @@ class pathCounter(threading.Thread):
         for c in self.collectors:
             bgprFilter += " and collector %s " % c
 
+        for p in self.includedPeers:
+            bgprFilter += " and peer %s " % p
 
         # if self.asnFilter is not None:
             # # TOFIX filter is now deprecated, we need to have both
