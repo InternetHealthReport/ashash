@@ -4,7 +4,6 @@ import glob
 import radix
 from collections import defaultdict
 from datetime import datetime
-
 import threading
 import copy
 import logging
@@ -57,8 +56,8 @@ class pathCounter(threading.Thread):
         self.collectors = collectors
         self.excludedPeers = set([int(x) for x in excludedPeers])
         self.includedPeers = set([int(x) for x in includedPeers])
-        self.excludedOriginASN = set([x.strip() for x in excludedOrigins if "/" not in x])
-        self.includedOriginASN = set([x.strip() for x in includedOrigins if "/" not in x])
+        self.excludedOriginASN = set([x.strip() for x in excludedOrigins if "/" not in x and "." not in x and ":" not in x])
+        self.includedOriginASN = set([x.strip() for x in includedOrigins if "/" not in x and "." not in x and ":" not in x])
         self.excludedPrefix = set([x.strip() for x in excludedOrigins if "/" in x])
         self.includedPrefix = set([x.strip() for x in includedOrigins if "/" in x])
         self.ts = None
@@ -74,7 +73,6 @@ class pathCounter(threading.Thread):
 
         self.txtFile = txtFile
         self.prefixWeight = prefixWeight
-
 
     def run(self):
         logging.info("Reading RIB files...")
@@ -101,10 +99,8 @@ class pathCounter(threading.Thread):
 
         logging.info("(pathCounter) Finished to read data")
 
-
     def nbIPs(self, prefixlen):
         return self.__nbaddr[self.af][prefixlen]
-
 
     def findParent(self, node, zOrig):
         parent = node.parent
@@ -114,7 +110,6 @@ class pathCounter(threading.Thread):
             return parent
         else:
             return self.findParent(parent, zOrig)
-
 
     def findFullFeeds(self, threshold):
         # logging.debug("(pathCounter) finding full feed peers...")
@@ -127,9 +122,9 @@ class pathCounter(threading.Thread):
 
         res = set([peer for peer, nbPfx in nbPrefixes.iteritems() if nbPfx>len(nodes)*threshold])
         logging.debug("(pathCounter) Using %s peers out of %s (threshold=%s)" % (len(res), len(nbPrefixes), threshold))
+        logging.debug("(pathCounter) Number of prefixes: %s" % (len(nodes)))
 
         return res
-
 
     def saveGraph(self):
         pass
@@ -219,10 +214,8 @@ class pathCounter(threading.Thread):
             for p in self.includedPeers:
                 bgprFilter += " and peer %s " % p
 
-            # Filter when reading data (because it doesn't work with too many
-            # prefixes)
-            # for p in self.includedPrefix:
-                # bgprFilter += " and prefix more %s " % p
+            for p in self.includedPrefix:
+                bgprFilter += " and prefix more %s " % p
 
             
             logging.info("Connecting to BGPstream... (%s)" % bgprFilter)
@@ -240,7 +233,7 @@ class pathCounter(threading.Thread):
         # for line in p1.stdout: 
         while(self.txtFile and not rec.running ) or (stream and stream.get_next_record(rec)):
             if rec.status  != "valid":
-                print rec.project, rec.collector, rec.type, rec.time, rec.status
+                print(rec.project, rec.collector, rec.type, rec.time, rec.status)
             zDt = rec.time
             elem = rec.get_next_elem()
 
@@ -252,7 +245,6 @@ class pathCounter(threading.Thread):
                     continue
                 zPfx = elem.fields["prefix"]
                 sPath = elem.fields["as-path"]
-                # print("%s: %s, %s, %s" % (zDt, zAS, zPfx, elem.fields))
 
                 if zPfx == "0.0.0.0/0" or zPfx in self.excludedPrefix or (len(self.includedPrefix) and zPfx not in self.includedPrefix):
                     elem = rec.get_next_elem()
@@ -267,6 +259,7 @@ class pathCounter(threading.Thread):
                     # delegated prefixes (and using IP addresses as spatial
                     # resolution) 
 
+                # print("%s: %s, %s, %s" % (zDt, zAS, zPfx, elem.fields))
                 self.peersASN[zOrig].add(zAS)
 
                 if len(path) < 2:
@@ -339,6 +332,9 @@ class pathCounter(threading.Thread):
 
         for p in self.includedPeers:
             bgprFilter += " and peer %s " % p
+
+        for p in self.includedPrefix:
+            bgprFilter += " and prefix more %s " % p
 
         # if self.asnFilter is not None:
             # # TOFIX filter is now deprecated, we need to have both
@@ -438,7 +434,7 @@ class pathCounter(threading.Thread):
                         del node.data[zOrig]
             
                 else:
-                # Announce: update counters
+                    # Announce: update counters
                     sPath = elem.fields["as-path"]
                     path = sPath.split(" ")
                     origAS = path[-1]
@@ -458,7 +454,7 @@ class pathCounter(threading.Thread):
                         self.announceQueue.put( (zDt, zOrig, zAS, zPfx, path) )
 
                     # Announce:
-                    if node is None or not zOrig in node.data :
+                    if node is None or zOrig not in node.data :
                         # Add a new node 
 
                         node = self.rtree.add(zPfx)
@@ -498,7 +494,6 @@ class pathCounter(threading.Thread):
                             asn = node.data[zOrig]["path"]
                             self.incCount(count,  zOrig, origAS, zAS, asns)
 
-
                     else:
                         #Update node path and counts
                         if self.spatialResolution:
@@ -518,4 +513,3 @@ class pathCounter(threading.Thread):
                         self.incTotalCount(count,  zOrig, origAS, zAS)
 
                 elem = rec.get_next_elem()
-
