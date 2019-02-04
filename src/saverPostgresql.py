@@ -16,7 +16,9 @@ from cStringIO import StringIO
 def validASN(asn):
     if isinstance(asn,int):
         return True
-    if asn.startswith("{") or asn.endswith(")") or asn.startswith("(") or "," in asn:
+    try:
+        a = int(asn)
+    except ValueError:
         return False
 
     return True
