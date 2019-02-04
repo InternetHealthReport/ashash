@@ -93,7 +93,8 @@ class saverPostgresql(object):
                 self.cursor.execute("INSERT INTO ihr_asn(number, name, tartiflette, disco, ashash) select %s, %s, FALSE, FALSE, TRUE WHERE NOT EXISTS ( SELECT number FROM ihr_asn WHERE number = %s)", (scope, self.asNames["AS"+str(scope)], scope))
                 self.cursor.execute("UPDATE ihr_asn SET ashash = TRUE where number = %s", (int(scope),))
             insertQuery = "INSERT INTO ihr_asn(number, name, tartiflette, disco, ashash) select %s, %s, FALSE, FALSE, TRUE WHERE NOT EXISTS ( SELECT number FROM ihr_asn WHERE number = %s)"
-            param = [(asn, self.asNames["AS"+str(asn)], asn) for asn in hege.keys() if  (isinstance(asn, int) or not asn.startswith("{") ) and int(asn) not in self.asns]
+            param = [(asn, self.asNames["AS"+str(asn)], asn) for asn in hege.keys() if  (isinstance(asn, int) or not asn.startswith("{") or not asn.endswith(")") ) and int(asn) not in self.asns]
+
             #toremove?
             for asn, _, _ in param:
                 self.asns.add(int(asn))
@@ -102,7 +103,7 @@ class saverPostgresql(object):
                 psycopg2.extras.execute_batch(self.cursor, insertQuery, param, page_size=100)
             
             # Hegemony values to copy in the database
-            self.dataHege.extend([(self.currenttime, int(scope), int(k), float(v), int(self.af)) for k,v in hege.iteritems() if (isinstance(k,int) or not k.startswith("{")) and v!=0 ])
+            self.dataHege.extend([(self.currenttime, int(scope), int(k), float(v), int(self.af)) for k,v in hege.iteritems() if (isinstance(k,int) or not k.startswith("{") or not asn.endswith(")")) and v!=0 ])
 
     def commit(self):
         logging.warn("psql: start copy")
