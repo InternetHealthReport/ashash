@@ -13,10 +13,10 @@ from multiprocessing import JoinableQueue as mpQueue
 from multiprocessing import Process
 from cStringIO import StringIO
 
-def validASN(k):
-    if isinstance(k,int):
+def validASN(asn):
+    if isinstance(asn,int):
         return True
-    if k.startswith("{") or asn.endswith(")") or "," in asn:
+    if asn.startswith("{") or asn.endswith(")") or "," in asn:
         return False
 
     return True
