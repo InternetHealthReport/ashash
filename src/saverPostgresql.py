@@ -100,7 +100,7 @@ class saverPostgresql(object):
                 self.cursor.execute("INSERT INTO ihr_asn(number, name, tartiflette, disco, ashash) select %s, %s, FALSE, FALSE, TRUE WHERE NOT EXISTS ( SELECT number FROM ihr_asn WHERE number = %s)", (scope, self.asNames["AS"+str(scope)], scope))
                 self.cursor.execute("UPDATE ihr_asn SET ashash = TRUE where number = %s", (int(scope),))
             insertQuery = "INSERT INTO ihr_asn(number, name, tartiflette, disco, ashash) select %s, %s, FALSE, FALSE, TRUE WHERE NOT EXISTS ( SELECT number FROM ihr_asn WHERE number = %s)"
-            param = [(asn, self.asNames["AS"+str(asn)], asn) for asn in hege.keys() if  (isinstance(asn, int) or not asn.startswith("{") or not asn.endswith(")") ) and int(asn) not in self.asns]
+            param = [(asn, self.asNames["AS"+str(asn)], asn) for asn in hege.keys() if  validASN(asn) and int(asn) not in self.asns]
 
             #toremove?
             for asn, _, _ in param:
