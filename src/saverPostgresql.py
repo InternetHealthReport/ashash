@@ -13,6 +13,13 @@ from multiprocessing import JoinableQueue as mpQueue
 from multiprocessing import Process
 from cStringIO import StringIO
 
+def validASN(k):
+    if isinstance(k,int):
+        return True
+    if k.startswith("{") or asn.endswith(")") or "," in asn:
+        return False
+
+    return True
 
 class saverPostgresql(object):
 
@@ -103,7 +110,7 @@ class saverPostgresql(object):
                 psycopg2.extras.execute_batch(self.cursor, insertQuery, param, page_size=100)
             
             # Hegemony values to copy in the database
-            self.dataHege.extend([(self.currenttime, int(scope), int(k), float(v), int(self.af)) for k,v in hege.iteritems() if (isinstance(k,int) or not k.startswith("{") or not asn.endswith(")")) and v!=0 ])
+            self.dataHege.extend([(self.currenttime, int(scope), int(k), float(v), int(self.af)) for k,v in hege.iteritems() if validASN(k) and v!=0 ])
 
     def commit(self):
         logging.warn("psql: start copy")
