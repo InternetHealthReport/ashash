@@ -4,6 +4,7 @@ import glob
 import radix
 from collections import defaultdict
 from datetime import datetime
+from datetime import timedelta
 import threading
 import copy
 import logging
@@ -37,8 +38,8 @@ class pathCounter(threading.Thread):
         threading.Thread.__init__ (self)
         self.__nbaddr = {4:{i: 2**(32-i) for i in range(33) }, 6: {i: 2**(128-i) for i in range(129) }}
 
-        self.startts = int(dt2ts(starttime))
-        self.endts = int(dt2ts(endtime))
+        self.startts = starttime
+        self.endts = endtime
         self.livemode = False
         if endtime > datetime.utcnow():
             self.livemode = True
@@ -195,10 +196,10 @@ class pathCounter(threading.Thread):
         rec = None
         if self.txtFile is None:
             # create a new bgpstream instance
-            stream = BGPStream()
+            # stream = BGPStream()
 
             # create a reusable bgprecord instance
-            rec = BGPRecord()
+            # rec = BGPRecord()
             bgprFilter = "type ribs"
 
             if self.af == 6:
@@ -217,99 +218,99 @@ class pathCounter(threading.Thread):
             for p in self.includedPrefix:
                 bgprFilter += " and prefix more %s " % p
 
+            stream = pybgpstream.BGPStream(
+                from_time=str(self.startts-timedelta(hours=1))+" UTC", 
+                until_time=str(self.startts+timedelta(hours=1))+" UTC",
+                record_type="ribs",
+                filter=bgprFilter
+            )
             
             logging.info("Connecting to BGPstream... (%s)" % bgprFilter)
-            logging.info("Timestamps: %s, %s" % (self.startts-3600, self.startts+3600))
-            stream.parse_filter_string(bgprFilter)
-            stream.add_interval_filter(self.startts-3600, self.startts+3600)
-            if self.livemode:
-                stream.set_live_mode()
+            logging.info("Timestamps: %s, %s" % (self.startts, self.startts))
+            # stream.parse_filter_string(bgprFilter)
+            # stream.add_interval_filter(self.startts-3600, self.startts+3600)
+            # if self.livemode:
+                # stream.set_live_mode()
 
-            stream.start()
+            # stream.start()
 
         else:
-            rec = txtReader.txtReader(self.txtFile)
+            stream = txtReader.txtReader(self.txtFile).stream()
 
         # for line in p1.stdout: 
-        while(self.txtFile and not rec.running ) or (stream and stream.get_next_record(rec)):
+        for elem in stream:
+            rec = elem.record
             if rec.status  != "valid":
                 print(rec.project, rec.collector, rec.type, rec.time, rec.status)
             zDt = rec.time
-            elem = rec.get_next_elem()
 
-            while(elem):
-                zOrig = elem.peer_address
-                zAS = elem.peer_asn
-                if zAS in self.excludedPeers or (len(self.includedPeers) and zAS not in self.includedPeers):
-                    elem = rec.get_next_elem()
-                    continue
-                zPfx = elem.fields["prefix"]
-                sPath = elem.fields["as-path"]
+            zOrig = elem.peer_address
+            zAS = elem.peer_asn
+            if zAS in self.excludedPeers or (len(self.includedPeers) and zAS not in self.includedPeers):
+                continue
 
-                if zPfx == "0.0.0.0/0" or zPfx in self.excludedPrefix or (len(self.includedPrefix) and zPfx not in self.includedPrefix):
-                    elem = rec.get_next_elem()
-                    continue
+            zPfx = elem.fields["prefix"]
+            sPath = elem.fields["as-path"]
 
-                path = sPath.split(" ")
-                origAS = path[-1]
-                if origAS in self.excludedOriginASN or (len(self.includedOriginASN) and origAS not in self.includedOriginASN):
-                    elem = rec.get_next_elem()
-                    continue
-                    # FIXME: this is not going to work in the case of
-                    # delegated prefixes (and using IP addresses as spatial
-                    # resolution) 
+            if zPfx == "0.0.0.0/0" or zPfx in self.excludedPrefix or (len(self.includedPrefix) and zPfx not in self.includedPrefix):
+                continue
 
-                # print("%s: %s, %s, %s" % (zDt, zAS, zPfx, elem.fields))
-                self.peersASN[zOrig].add(zAS)
+            path = sPath.split(" ")
+            origAS = path[-1]
+            if origAS in self.excludedOriginASN or (len(self.includedOriginASN) and origAS not in self.includedOriginASN):
+                continue
+                # FIXME: this is not going to work in the case of
+                # delegated prefixes (and using IP addresses as spatial
+                # resolution) 
 
-                if len(path) < 2:
-                    # Ignore paths with only one AS
-                    elem = rec.get_next_elem()
-                    continue
+            # print("%s: %s, %s, %s" % (zDt, zAS, zPfx, elem.fields))
+            self.peersASN[zOrig].add(zAS)
 
-                node = self.rtree.add(zPfx)
-                if zOrig in node.data:
-                    # Already read this entry, we should read only one RIB per peer
-                    elem = rec.get_next_elem()
-                    continue
+            if len(path) < 2:
+                # Ignore paths with only one AS
+                continue
 
-                if self.ribQueue is not None:
-                    self.ribQueue.put( (zDt, zOrig, zAS, zPfx, path ) )
+            node = self.rtree.add(zPfx)
+            if zOrig in node.data:
+                # Already read this entry, we should read only one RIB per peer
+                continue
 
-                node.data[zOrig] = {"path": set(path), "count": 0, "origAS":origAS}
+            if self.ribQueue is not None:
+                self.ribQueue.put( (zDt, zOrig, zAS, zPfx, path ) )
 
-                # print "%s, %s, %s, %s, %s" % (elem.time, elem.type, elem.peer_address, elem.peer_asn, elem.fields)
+            node.data[zOrig] = {"path": set(path), "count": 0, "origAS":origAS}
 
-                if self.spatialResolution:
-                    # compute weight for this path
-                    count = self.nbIPs(node.prefixlen)
-                    countBelow = sum([n.data[zOrig]["count"] for n in self.rtree.search_covered(zPfx) if zOrig in n.data and n!=node ])
-                    count -= countBelow
-                    # assert count >= 0
-                    node.data[zOrig]["count"] = count
+            # print "%s, %s, %s, %s, %s" % (elem.time, elem.type, elem.peer_address, elem.peer_asn, elem.fields)
 
-                    # Update above nodes
-                    parent = self.findParent(node, zOrig)
-                    if not parent is None:
-                        # pcountBelow = sum([n.data[zOrig]["count"] for n in self.rtree.search_covered(parent.prefix) if n.parent == parent and zOrig in n.data])
-                        pcountBelow = sum([n.data[zOrig]["count"] for n in self.rtree.search_covered(parent.prefix) if zOrig in n.data and n!=parent])
-                        oldpCount = parent.data[zOrig]["count"]
-                        pCount = self.nbIPs(parent.prefixlen) - pcountBelow
-                        pdiff = pCount - oldpCount
-                        parent.data[zOrig]["count"] = pCount 
-                        pOrigAS = parent.data[zOrig]["origAS"]
-                        asns = parent.data[zOrig]["path"]
-                        self.incCount(pdiff, zOrig, pOrigAS, zAS, asns)
-                        self.incTotalCount(pdiff, zOrig, pOrigAS, zAS)
-                else:
-                    count = self.path_weight(zPfx)
-                    node.data[zOrig]["count"] = count
+            if self.spatialResolution:
+                # compute weight for this path
+                count = self.nbIPs(node.prefixlen)
+                countBelow = sum([n.data[zOrig]["count"] for n in self.rtree.search_covered(zPfx) if zOrig in n.data and n!=node ])
+                count -= countBelow
+                # assert count >= 0
+                node.data[zOrig]["count"] = count
 
-                asns = node.data[zOrig]["path"]
-                self.incTotalCount(count, zOrig, origAS, zAS)
-                self.incCount(count, zOrig, origAS, zAS, asns)
-            
-                elem = rec.get_next_elem()
+                # Update above nodes
+                parent = self.findParent(node, zOrig)
+                if not parent is None:
+                    # pcountBelow = sum([n.data[zOrig]["count"] for n in self.rtree.search_covered(parent.prefix) if n.parent == parent and zOrig in n.data])
+                    pcountBelow = sum([n.data[zOrig]["count"] for n in self.rtree.search_covered(parent.prefix) if zOrig in n.data and n!=parent])
+                    oldpCount = parent.data[zOrig]["count"]
+                    pCount = self.nbIPs(parent.prefixlen) - pcountBelow
+                    pdiff = pCount - oldpCount
+                    parent.data[zOrig]["count"] = pCount 
+                    pOrigAS = parent.data[zOrig]["origAS"]
+                    asns = parent.data[zOrig]["path"]
+                    self.incCount(pdiff, zOrig, pOrigAS, zAS, asns)
+                    self.incTotalCount(pdiff, zOrig, pOrigAS, zAS)
+            else:
+                count = self.path_weight(zPfx)
+                node.data[zOrig]["count"] = count
+
+            asns = node.data[zOrig]["path"]
+            self.incTotalCount(count, zOrig, origAS, zAS)
+            self.incCount(count, zOrig, origAS, zAS, asns)
+        
 
 
     def readupdates(self):
@@ -318,7 +319,7 @@ class pathCounter(threading.Thread):
             return
 
         # create a new bgpstream instance
-        stream = BGPStream()
+        # stream = BGPStream()
         bgprFilter = "type updates"
 
         if self.af == 6:
@@ -336,6 +337,13 @@ class pathCounter(threading.Thread):
         for p in self.includedPrefix:
             bgprFilter += " and prefix more %s " % p
 
+        stream = pybgpstream.BGPStream(
+            from_time=str(self.startts)+" UTC", 
+            until_time=str(self.endts)+" UTC",
+            record_type="updates",
+            filter=bgprFilter
+        )
+            
         # if self.asnFilter is not None:
             # # TOFIX filter is now deprecated, we need to have both
             # # announcements and withdrawals
@@ -343,173 +351,167 @@ class pathCounter(threading.Thread):
         
         logging.info("Connecting to BGPstream... (%s)" % bgprFilter)
         logging.info("Timestamps: %s, %s" % (self.startts, self.endts))
-        stream.parse_filter_string(bgprFilter)
-        stream.add_interval_filter(self.startts, self.endts)
-        if self.livemode:
-            stream.set_live_mode()
+        # stream.parse_filter_string(bgprFilter)
+        # stream.add_interval_filter(self.startts, self.endts)
+        # if self.livemode:
+            # stream.set_live_mode()
 
-        stream.start()
+        # stream.start()
         # for line in p1.stdout: 
         # create a reusable bgprecord instance
-        rec = BGPRecord()
-        while(stream.get_next_record(rec)):
+        # rec = BGPRecord()
+        for elem in stream:
+            rec = elem.record
+
             if rec.status  != "valid":
                 logging.warn("Invalid BGP record: %s, %s, %s, %s, %s" % ( rec.project, rec.collector, rec.type, rec.time, rec.status) )
             zDt = rec.time
-            elem = rec.get_next_elem()
-            while(elem):
-                zOrig = elem.peer_address
-                if  zOrig not in self.peers:
-                    # no need to update the counts for non-full feed peers
-                    elem = rec.get_next_elem()
-                    continue
+            zOrig = elem.peer_address
+            if  zOrig not in self.peers:
+                # no need to update the counts for non-full feed peers
+                continue
 
-                zAS = elem.peer_asn
-                if zAS in self.excludedPeers or (len(self.includedPeers) and zAS not in self.includedPeers):
-                    elem = rec.get_next_elem()
-                    continue
-                zPfx = elem.fields["prefix"]
-                if zPfx == "0.0.0.0/0" or zPfx in self.excludedPrefix or (len(self.includedPrefix) and zPfx not in self.includedPrefix):
-                    elem = rec.get_next_elem()
-                    continue
+            zAS = elem.peer_asn
+            if zAS in self.excludedPeers or (len(self.includedPeers) and zAS not in self.includedPeers):
+                continue
 
-                msgTs = zDt
-                # set first time bin!
-                if self.ts is None:
-                    self.slideTimeWindow(msgTs)
-            
-                elif self.ts + self.timeWindow <= msgTs:
-                    self.slideTimeWindow(msgTs)
+            zPfx = elem.fields["prefix"]
+            if zPfx == "0.0.0.0/0" or zPfx in self.excludedPrefix or (len(self.includedPrefix) and zPfx not in self.includedPrefix):
+                continue
 
-                elif self.ts > msgTs:
-                    #Old update, ignore this to update the graph
-                    logging.warn("Ignoring old update (peer IP: %s, timestamp: %s, current time bin: %s): %s" % (zOrig, zDt, self.ts, (elem.type, zAS, elem.fields)))
-                    elem = rec.get_next_elem()
-                    continue
+            msgTs = zDt
+            # set first time bin!
+            if self.ts is None:
+                self.slideTimeWindow(msgTs)
+        
+            elif self.ts + self.timeWindow <= msgTs:
+                self.slideTimeWindow(msgTs)
 
-                node = self.rtree.search_exact(zPfx)
+            elif self.ts > msgTs:
+                #Old update, ignore this to update the graph
+                logging.warn("Ignoring old update (peer IP: %s, timestamp: %s, current time bin: %s): %s" % (zOrig, zDt, self.ts, (elem.type, zAS, elem.fields)))
+                continue
 
-                if elem.type == "W":
-                    # Withdraw: remove the corresponding node
-                    if not node is None and zOrig in node.data:
-                        origAS = node.data[zOrig]["origAS"]
+            node = self.rtree.search_exact(zPfx)
 
-                        if self.spatialResolution:
-                            count = node.data[zOrig]["count"]
-                            # Update count for above node
-                            parent = self.findParent(node, zOrig) 
-                            if parent is None:
-                                self.incTotalCount(-count,  zOrig, origAS, zAS)
-                                asns = node.data[zOrig]["path"]
-                                self.incCount(-count,  zOrig, origAS, zAS, asns)
-                            else:
-                                node.data[zOrig]["count"] = 0
-                                # Add ips to above node and corresponding ASes
-                                # pcountBelow = sum([n.data[zOrig]["count"] for n in self.rtree.search_covered(parent.prefix) if zOrig in n.data and n!=parent])
-                                # pcountBelow = sum([n.data[zOrig]["count"] for n in self.rtree.search_covered(parent.prefix) if n.parent == parent and zOrig in n.data])
-                                # oldpCount = parent.data[zOrig]["count"]
-                                # pCount = self.nbIPs(parent.prefixlen) - pcountBelow
-                                # parent.data[zOrig]["count"] = pCount 
-                                # pdiff = pCount - oldpCount
-                                # assert pdiff==count
+            if elem.type == "W":
+                # Withdraw: remove the corresponding node
+                if not node is None and zOrig in node.data:
+                    origAS = node.data[zOrig]["origAS"]
 
-                                # Update count for origAS and path from the
-                                # parent node
-                                porigAS = parent.data[zOrig]["origAS"]
-                                pasns= parent.data[zOrig]["path"]
-                                self.incCount(count,  zOrig, porigAS, zAS, pasns)
-                                self.incTotalCount(count, zOrig, porigAS, zAS)
-
-                                # Update count for withdrawn origAS and path 
-                                asns = node.data[zOrig]["path"]
-                                self.incCount(-count,  zOrig, origAS, zAS, asns)
-                                self.incTotalCount(-count,  zOrig, origAS, zAS)
-
-                        else: 
+                    if self.spatialResolution:
+                        count = node.data[zOrig]["count"]
+                        # Update count for above node
+                        parent = self.findParent(node, zOrig) 
+                        if parent is None:
+                            self.incTotalCount(-count,  zOrig, origAS, zAS)
                             asns = node.data[zOrig]["path"]
-                            count = self.path_weight(zPfx)
+                            self.incCount(-count,  zOrig, origAS, zAS, asns)
+                        else:
+                            node.data[zOrig]["count"] = 0
+                            # Add ips to above node and corresponding ASes
+                            # pcountBelow = sum([n.data[zOrig]["count"] for n in self.rtree.search_covered(parent.prefix) if zOrig in n.data and n!=parent])
+                            # pcountBelow = sum([n.data[zOrig]["count"] for n in self.rtree.search_covered(parent.prefix) if n.parent == parent and zOrig in n.data])
+                            # oldpCount = parent.data[zOrig]["count"]
+                            # pCount = self.nbIPs(parent.prefixlen) - pcountBelow
+                            # parent.data[zOrig]["count"] = pCount 
+                            # pdiff = pCount - oldpCount
+                            # assert pdiff==count
+
+                            # Update count for origAS and path from the
+                            # parent node
+                            porigAS = parent.data[zOrig]["origAS"]
+                            pasns= parent.data[zOrig]["path"]
+                            self.incCount(count,  zOrig, porigAS, zAS, pasns)
+                            self.incTotalCount(count, zOrig, porigAS, zAS)
+
+                            # Update count for withdrawn origAS and path 
+                            asns = node.data[zOrig]["path"]
                             self.incCount(-count,  zOrig, origAS, zAS, asns)
                             self.incTotalCount(-count,  zOrig, origAS, zAS)
 
-                        del node.data[zOrig]
-            
-                else:
-                    # Announce: update counters
-                    sPath = elem.fields["as-path"]
-                    path = sPath.split(" ")
-                    origAS = path[-1]
-
-                    if origAS in self.excludedOriginASN or (len(self.includedOriginASN) and origAS not in self.includedOriginASN):
-                        elem = rec.get_next_elem()
-                        continue
-                        # FIXME: this is not going to work in the case of
-                        # delegated prefixes or implicit withdraws
-
-                    if len(path) < 2:
-                        # Ignoring paths with only one AS
-                        elem = rec.get_next_elem()
-                        continue
-                    
-                    if self.announceQueue is not None:
-                        self.announceQueue.put( (zDt, zOrig, zAS, zPfx, path) )
-
-                    # Announce:
-                    if node is None or zOrig not in node.data :
-                        # Add a new node 
-
-                        node = self.rtree.add(zPfx)
-                        if self.spatialResolution:
-                            # Compute the exact number of IPs
-                            count = self.nbIPs(node.prefixlen)
-                            countBelow = sum([n.data[zOrig]["count"] for n in self.rtree.search_covered(zPfx) if zOrig in n.data  and n!=node])
-                            count -= countBelow
-                            # Update the ASes counts
-                            node.data[zOrig] = {"path": set(path), "count": count, "origAS": origAS}
-                            asns = node.data[zOrig]["path"]
-                            self.incCount(count,  zOrig, origAS, zAS, asns)
-                            self.incTotalCount(count, zOrig, origAS, zAS)
-
-                            parent = self.findParent(node, zOrig)
-                            if not parent is None:
-                                # Update above nodes 
-                                # print("%s: (%s) %s, %s, %s" % (zDt, elem.type, zAS, zPfx, count))
-                                pcountBelow = sum([n.data[zOrig]["count"] for n in self.rtree.search_covered(parent.prefix) if zOrig in n.data and n!=parent ])
-                                # pcountBelow = sum([n.data[zOrig]["count"] for n in self.rtree.search_covered(parent.prefix) if n.parent == parent and zOrig in n.data])
-                                oldpCount = parent.data[zOrig]["count"]
-                                pCount = self.nbIPs(parent.prefixlen) - pcountBelow
-                                pdiff = pCount - oldpCount
-                                parent.data[zOrig]["count"] = pCount 
-                                # print("parent %s: (%s) %s, %s, %s" % (zDt, zAS, parent.prefix, oldpCount, pCount))
-                                # print [(n.prefix,n.data[zOrig]["count"]) for n in self.rtree.search_covered(parent.prefix) if zOrig in n.data and n!=parent ]
-                                porigAS = parent.data[zOrig]["origAS"]
-                                pasns = parent.data[zOrig]["path"]
-                                self.incCount(pdiff,  zOrig, porigAS, zAS, pasns)
-                                self.incTotalCount(pdiff, zOrig, porigAS, zAS)
-
-                        else:
-                            count = self.path_weight(zPfx)
-                            self.incTotalCount(count,  zOrig, origAS, zAS)
-                            # Update the ASes counts
-                            node.data[zOrig] = {"path": set(path), "count": count, "origAS": origAS}
-                            asn = node.data[zOrig]["path"]
-                            self.incCount(count,  zOrig, origAS, zAS, asns)
-
-                    else:
-                        #Update node path and counts
-                        if self.spatialResolution:
-                            count = node.data[zOrig]["count"]
-                        else:
-                            count = self.path_weight(zPfx)
-
-                        porigAS = node.data[zOrig]["origAS"]
+                    else: 
                         asns = node.data[zOrig]["path"]
-                        self.incCount(-count,  zOrig, porigAS, zAS, asns)
-                        self.incTotalCount(-count,  zOrig, porigAS, zAS)
+                        count = self.path_weight(zPfx)
+                        self.incCount(-count,  zOrig, origAS, zAS, asns)
+                        self.incTotalCount(-count,  zOrig, origAS, zAS)
 
-                        node.data[zOrig]["path"] = set(path)
-                        node.data[zOrig]["origAS"] = origAS
+                    del node.data[zOrig]
+        
+            else:
+                # Announce: update counters
+                sPath = elem.fields["as-path"]
+                path = sPath.split(" ")
+                origAS = path[-1]
+
+                if origAS in self.excludedOriginASN or (len(self.includedOriginASN) and origAS not in self.includedOriginASN):
+                    continue
+                    # FIXME: this is not going to work in the case of
+                    # delegated prefixes or implicit withdraws
+
+                if len(path) < 2:
+                    # Ignoring paths with only one AS
+                    continue
+                
+                if self.announceQueue is not None:
+                    self.announceQueue.put( (zDt, zOrig, zAS, zPfx, path) )
+
+                # Announce:
+                if node is None or zOrig not in node.data :
+                    # Add a new node 
+
+                    node = self.rtree.add(zPfx)
+                    if self.spatialResolution:
+                        # Compute the exact number of IPs
+                        count = self.nbIPs(node.prefixlen)
+                        countBelow = sum([n.data[zOrig]["count"] for n in self.rtree.search_covered(zPfx) if zOrig in n.data  and n!=node])
+                        count -= countBelow
+                        # Update the ASes counts
+                        node.data[zOrig] = {"path": set(path), "count": count, "origAS": origAS}
                         asns = node.data[zOrig]["path"]
                         self.incCount(count,  zOrig, origAS, zAS, asns)
-                        self.incTotalCount(count,  zOrig, origAS, zAS)
+                        self.incTotalCount(count, zOrig, origAS, zAS)
 
-                elem = rec.get_next_elem()
+                        parent = self.findParent(node, zOrig)
+                        if not parent is None:
+                            # Update above nodes 
+                            # print("%s: (%s) %s, %s, %s" % (zDt, elem.type, zAS, zPfx, count))
+                            pcountBelow = sum([n.data[zOrig]["count"] for n in self.rtree.search_covered(parent.prefix) if zOrig in n.data and n!=parent ])
+                            # pcountBelow = sum([n.data[zOrig]["count"] for n in self.rtree.search_covered(parent.prefix) if n.parent == parent and zOrig in n.data])
+                            oldpCount = parent.data[zOrig]["count"]
+                            pCount = self.nbIPs(parent.prefixlen) - pcountBelow
+                            pdiff = pCount - oldpCount
+                            parent.data[zOrig]["count"] = pCount 
+                            # print("parent %s: (%s) %s, %s, %s" % (zDt, zAS, parent.prefix, oldpCount, pCount))
+                            # print [(n.prefix,n.data[zOrig]["count"]) for n in self.rtree.search_covered(parent.prefix) if zOrig in n.data and n!=parent ]
+                            porigAS = parent.data[zOrig]["origAS"]
+                            pasns = parent.data[zOrig]["path"]
+                            self.incCount(pdiff,  zOrig, porigAS, zAS, pasns)
+                            self.incTotalCount(pdiff, zOrig, porigAS, zAS)
+
+                    else:
+                        count = self.path_weight(zPfx)
+                        self.incTotalCount(count,  zOrig, origAS, zAS)
+                        # Update the ASes counts
+                        node.data[zOrig] = {"path": set(path), "count": count, "origAS": origAS}
+                        asn = node.data[zOrig]["path"]
+                        self.incCount(count,  zOrig, origAS, zAS, asns)
+
+                else:
+                    #Update node path and counts
+                    if self.spatialResolution:
+                        count = node.data[zOrig]["count"]
+                    else:
+                        count = self.path_weight(zPfx)
+
+                    porigAS = node.data[zOrig]["origAS"]
+                    asns = node.data[zOrig]["path"]
+                    self.incCount(-count,  zOrig, porigAS, zAS, asns)
+                    self.incTotalCount(-count,  zOrig, porigAS, zAS)
+
+                    node.data[zOrig]["path"] = set(path)
+                    node.data[zOrig]["origAS"] = origAS
+                    asns = node.data[zOrig]["path"]
+                    self.incCount(count,  zOrig, origAS, zAS, asns)
+                    self.incTotalCount(count,  zOrig, origAS, zAS)
+

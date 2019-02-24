@@ -2,7 +2,8 @@ import csv
 
 
 class BGPRecord():
-    def __init__(self, ts, peerIP, peerAS, prefix, aspath, community):
+    def __init__(self, row):
+        ts, peerIP, peerAS, prefix, aspath, community = row[1], row[3], row[4], row[5], row[6], row[11] 
         self.ts = int(ts)
         self.peer_address = peerIP.strip()
         self.peer_asn = peerAS.strip()
@@ -21,14 +22,6 @@ class txtReader():
         self.status = "valid"
 
 
-    def get_next_elem(self):
+    def stream(self):
         self.running = True
-        try:
-            row = self.reader.next()
-            return BGPRecord(row[1], row[3], row[4], row[5], row[6], row[11] )
-
-        except StopIteration:
-            return None
-
-
-     
+        return map(BGPRecord, self.reader.next())
