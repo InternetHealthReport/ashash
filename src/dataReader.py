@@ -25,7 +25,7 @@ class DataReader():
         else:
             self.topicName += "Historic"
 
-        self.consumer = KafkaConsumer(auto_offset_reset="earliest",bootstrap_servers=['localhost:9092'],consumer_timeout_ms=1000)
+        self.consumer = KafkaConsumer(auto_offset_reset="earliest",bootstrap_servers=['localhost:9092'],consumer_timeout_ms=1000,value_deserializer=lambda m: json.loads(m.decode('ascii')))
         self.topicPartition = TopicPartition(self.topicName,0)
 
         self.windowSize = 21600*1000 #milliseconds  #6 hours
@@ -55,9 +55,12 @@ class DataReader():
             if messageTimestamp > timestampToBreakAt:
                 break
 
+            """
             msgAsString = message.value.decode("utf-8")
 
-            msgAsDict = json.loads(msgAsString)
+            msgAsDict = json.loads(msgAsString)"""
+
+            msgAsDict = message.value
 
             self.dataHandler(msgAsDict)
             

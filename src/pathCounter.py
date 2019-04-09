@@ -34,7 +34,7 @@ class pathCounter(threading.Thread):
             spatialResolution=1, af=4, timeWindow=900, #asnFilter=None, 
             collectors=[ "route-views.linx", "route-views3", "rrc00", "rrc10"],
             includedPeers=[], excludedPeers=[], includedOrigins=[], excludedOrigins=[], 
-            onlyFullFeed=True, txtFile=None, prefixWeight=None):
+            onlyFullFeed=True, txtFile=None, prefixWeight=None, useKafka=0):
 
         threading.Thread.__init__ (self)
         self.__nbaddr = {4:{i: 2**(32-i) for i in range(33) }, 6: {i: 2**(128-i) for i in range(129) }}
@@ -76,10 +76,15 @@ class pathCounter(threading.Thread):
         self.txtFile = txtFile
         self.prefixWeight = prefixWeight
 
+        self.useKafka = useKafka
+
     def run(self):
         logging.info("Reading RIB files...")
         
-        self.consumerib()
+        if self.useKafka:
+            self.consumerib()
+        else:
+            self.readrib()
 
         if self.onlyFullFeed: 
             self.peers = self.findFullFeeds(0.75)
@@ -97,7 +102,10 @@ class pathCounter(threading.Thread):
 
         logging.info("Reading UPDATE files...")
         if self.startts != self.endts:
-            self.consumeupdates(liveMode=False)
+            if self.useKafka:
+                self.consumeupdates(liveMode=False)
+            else:
+                self.readupdates()
         else:
             self.slideTimeWindow(0)
 
@@ -265,7 +273,7 @@ class pathCounter(threading.Thread):
                 node.data[zOrig]["count"] = count
 
             asns = node.data[zOrig]["path"]
-            print("Got a count (RIB): ",count)
+            #print("Got a count (RIB): ",count)
             self.incTotalCount(count, zOrig, origAS, zAS)
             self.incCount(count, zOrig, origAS, zAS, asns)
 
@@ -425,7 +433,7 @@ class pathCounter(threading.Thread):
                     node.data[zOrig]["path"] = set(path)
                     node.data[zOrig]["origAS"] = origAS
                     asns = node.data[zOrig]["path"]
-                    print("Got a count (Updates): ",count)
+                    #print("Got a count (Updates): ",count)
                     self.incCount(count,  zOrig, origAS, zAS, asns)
                     self.incTotalCount(count,  zOrig, origAS, zAS)
 
