@@ -22,7 +22,7 @@ class saverCSV(object):
 
     def run(self):
 
-        self.filepointer.write("#timestamp, originasn, asn, hegemony\n" % val)
+        self.filepointer.write("#timestamp, originasn, asn, hegemony\n")
         while True:
             elem = self.saverQueue.get()
             if self.saverChain is not None:
