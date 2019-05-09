@@ -38,12 +38,14 @@ parser.add_argument("-M", help="number of sketches per hash function", type=str)
 parser.add_argument("-d","--distThresh", help="simhash distance threshold", type=str)
 parser.add_argument("-g","--asGraph", help="dump the global AS graph")
 parser.add_argument("-p","--postgre", help="send results to postgreSQL")
+parser.add_argument("--csv", help="write results to csv files", type=str)
 parser.add_argument("-r","--minVoteRatio", help="Minimum ratio of sketches to detect anomalies (should be between 0 and 1)", type=str)
 parser.add_argument("-s", "--spatial", help="spatial resolution (0 for prefix, 1 for address)", type=str)
 parser.add_argument("-w", "--window", help="Time window: time resolution in seconds", type=str)
 parser.add_argument("-o", "--output", help="output directory")
 parser.add_argument("-f", "--inputFile", help="txt input file", type=str)
 parser.add_argument("-n", "--keepNullHege", help="Record AS with hegemony equal to zero (discarded by default)" )
+parser.add_argument("-k", "--kafka", help="Read data from Kafka", type=str)
 parser.add_argument("starttime", help="UTC start time, e.g. 2017-10-17T00:00 (should correspond to a date and time when RIB files are available)",  type=str)
 parser.add_argument("endtime", help="UTC end time", type=str)
 args = parser.parse_args()
@@ -70,9 +72,9 @@ onlyFullFeed = bool(int(config_parser.get("peers","onlyfullfeed")))
 af = int(config_parser.get("origins","af",False,argsDict))
 spatial = int(config_parser.get("origins","spatial",False,argsDict))
 weights = config_parser.get("origins","weights",False,argsDict)
-if weights: 
+if weights:
     weights = json.loads(weights)
-includedOrigins = [x.strip() for x in config_parser.get("origins","include",False,argsDict).split(",") if x.strip() != ""]  
+includedOrigins = [x.strip() for x in config_parser.get("origins","include",False,argsDict).split(",") if x.strip() != ""]
 excludedOrigins = [x.strip() for x in config_parser.get("origins","exclude",False,argsDict).split(",") if x.strip() != ""]
 alpha = float(config_parser.get("hegemony","alpha",False,argsDict))
 forceTrim = bool(int(config_parser.get("hegemony","forceTrim",False,argsDict)))
@@ -85,6 +87,7 @@ output = config_parser.get("output","output",False,argsDict)
 writeASGraph = bool(int(config_parser.get("output","asGraph",False,argsDict)))
 postgre = bool(int(config_parser.get("output","postgre",False,argsDict)))
 keepNullHege = bool(int(config_parser.get("output","keepNullHege",False,argsDict)))
+useKafka = bool(int(config_parser.get("data","kafka",False,argsDict)))
 
 try:
     os.makedirs(os.path.dirname(output))
@@ -105,7 +108,7 @@ countQueue = Queue.Queue(10)
 hegemonyQueue = Queue.Queue(60000)
 saverQueue = mpQueue(10000)
 announceQueue = None
-nbGM = N/2 
+nbGM = N/2
 pipeGM = []
 # for i in range(nbGM):
     # pipeGM.append(mpPipe(False))
@@ -132,11 +135,11 @@ if outlierDetection:
     od = Process(target=outlierDetection.outlierDetection, args=(pipeOD[0], 3.0, 5), name="OD")
 
 pc = pathCounter.pathCounter(starttime, endtime, announceQueue, countQueue,
-        ribQueue, spatialResolution=spatial, af=af, 
-         timeWindow=window, collectors=collector, excludedPeers=excludedPeers, 
-         includedPeers=includedPeers, includedOrigins=includedOrigins, 
-         excludedOrigins=excludedOrigins, onlyFullFeed=onlyFullFeed, 
-         txtFile=inputFile, prefixWeight=weights)
+        ribQueue, spatialResolution=spatial, af=af,
+         timeWindow=window, collectors=collector, excludedPeers=excludedPeers,
+         includedPeers=includedPeers, includedOrigins=includedOrigins,
+         excludedOrigins=excludedOrigins, onlyFullFeed=onlyFullFeed,
+         txtFile=inputFile, prefixWeight=weights, useKafka=useKafka)
 ash = asHegemony.asHegemony(countQueue, hegemonyQueue, alpha=alpha, saverQueue=saverQueue, forceTrim=forceTrim)
 
 saverQueuePostgre = None
@@ -147,12 +150,19 @@ if postgre:
     sp = Process(target=saverPostgresql.saverPostgresql, args=(starttime, af, saverQueuePostgre), name="saverPostgresql")
     sp.start()
 
-sqldb = output+"results_%s.sql" % starttime
-ss = Process(target=saverSQLite.saverSQLite, args=(sqldb, saverQueue, saverQueuePostgre, keepNullHege), name="saverSQLite")
-ss.start()
-saverQueue.put(("experiment", [datetime.now(), str(sys.argv), str(args)]))
+if 'csv' in argsDict:
+    filename = None
+    if argsDict['csv'] != '':
+        filename = argsDict['csv']
+    ss = Process(target=saverCSV.saverCSV, args=(filename, saverQueue, saverQueuePostgre, keepNullHege), name="saverCSV")
+    ss.start()
+else:
+    sqldb = output+"results_%s.sql" % starttime
+    ss = Process(target=saverSQLite.saverSQLite, args=(sqldb, saverQueue, saverQueuePostgre, keepNullHege), name="saverSQLite")
+    ss.start()
+    saverQueue.put(("experiment", [datetime.now(), str(sys.argv), str(args)]))
 
-for g in gm: 
+for g in gm:
     g.start();
 
 if outlierDetection:
@@ -203,7 +213,7 @@ if saverQueuePostgre is not None:
 
 logging.debug("Killing child processes")
 ss.terminate()
-for g in gm: 
+for g in gm:
     g.terminate()
 
 logging.info("Good bye!")
