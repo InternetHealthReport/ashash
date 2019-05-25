@@ -45,6 +45,7 @@ parser.add_argument("-o", "--output", help="output directory")
 parser.add_argument("-f", "--inputFile", help="txt input file", type=str)
 parser.add_argument("-n", "--keepNullHege", help="Record AS with hegemony equal to zero (discarded by default)" )
 parser.add_argument("-k", "--kafka", help="Read data from Kafka", type=str)
+parser.add_argument("-sK", "--saveToKafka", help="send results to Kafka cluster", type=str)
 parser.add_argument("starttime", help="UTC start time, e.g. 2017-10-17T00:00 (should correspond to a date and time when RIB files are available)",  type=str)
 parser.add_argument("endtime", help="UTC end time", type=str)
 args = parser.parse_args()
@@ -85,6 +86,7 @@ minVoteRatio = float(config_parser.get("detection","minVoteRatio",False,argsDict
 output = config_parser.get("output","output",False,argsDict)
 writeASGraph = bool(int(config_parser.get("output","asGraph",False,argsDict)))
 postgre = bool(int(config_parser.get("output","postgre",False,argsDict)))
+saveToKafka = bool(int(config_parser.get("output","saveToKafka",False,argsDict)))
 keepNullHege = bool(int(config_parser.get("output","keepNullHege",False,argsDict)))
 useKafka = bool(int(config_parser.get("data","kafka",False,argsDict)))
 
@@ -148,6 +150,12 @@ if postgre:
     saverQueuePostgre = mpQueue(10000)
     sp = Process(target=saverPostgresql.saverPostgresql, args=(starttime, af, saverQueuePostgre), name="saverPostgresql")
     sp.start()
+
+if saveToKafka:
+    logging.info("Will push results to Kafka")
+    import saverKafka
+    sK = Process(target=saverKafka.saverKafka, args=(['localhost:9092'],saverQueue,saverQueuePostgre,keepNullHege), name="saverKafka")
+    sK.start()
 
 sqldb = output+"results_%s.sql" % starttime
 ss = Process(target=saverSQLite.saverSQLite, args=(sqldb, saverQueue, saverQueuePostgre, keepNullHege), name="saverSQLite")
