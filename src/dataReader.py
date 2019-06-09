@@ -8,10 +8,9 @@ import logging
 from kafka.structs import TopicPartition, OffsetAndTimestamp
 
 class DataReader():
-    def __init__(self,collectorName,startTS,dataHandler,liveMode,collectionType,af=4,includedPeers=[],includedPrefix=[]):
+    def __init__(self,collectorName,startTS,liveMode,collectionType,af=4,includedPeers=[],includedPrefix=[]):
         self.collector = collectorName
         self.startTS = startTS
-        self.dataHandler = dataHandler
         self.liveMode = liveMode
         self.collectionType = collectionType
         self.af = af
@@ -30,13 +29,33 @@ class DataReader():
 
         self.windowSize = 21600*1000 #milliseconds  #6 hours
 
+        self.observers = []
+
+    def attach(self,observer):
+        if observer not in self.observers:
+            self.observers.append(observer)
+
+    def performUpdate(self,data):
+        for observer in self.observers:
+            if self.collectionType == "RIB":
+                observer.updateCountsRIB(data)
+            else:
+                observer.updateCountsUpdates(data)
+
     def start(self):
         #seek the timestamp in consumer
-        timestampToSeek = self.startTS*1000
 
-        timestampToBreakAt = timestampToSeek + self.windowSize
+        if self.collectionType == "RIB":
+            timestampToSeek = (self.startTS - 3600)*1000
+        else:
+            timestampToSeek = self.startTS * 1000
 
-        print("Time Start: ",timestampToSeek,"Time End: ",timestampToBreakAt)
+        if self.collectionType == "RIB":
+            timestampToBreakAt = (self.startTS + 3600)*1000
+        else:
+            timestampToBreakAt = timestampToSeek + self.windowSize
+
+        print(self.collectionType," ,Time Start: ",timestampToSeek,"Time End: ",timestampToBreakAt)
 
         offsets = self.consumer.offsets_for_times({self.topicPartition:timestampToSeek})
         theOffset = offsets[self.topicPartition].offset
@@ -62,5 +81,5 @@ class DataReader():
 
             msgAsDict = message.value
 
-            self.dataHandler(msgAsDict)
+            self.performUpdate(msgAsDict)
             

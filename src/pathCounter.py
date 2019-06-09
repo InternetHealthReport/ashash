@@ -440,28 +440,20 @@ class pathCounter(threading.Thread):
     def consumerib(self):
         readers = []
         for c in self.collectors:
-            readers.append(DataReader(c,self.startts,self.updateCountsRIB,False,collectionType="RIB"))
+            readers.append(DataReader(c,self.startts,False,collectionType="RIB"))
 
         for reader in readers:
-            print("Going to start a RIB update")
-
+            reader.attach(self)
             reader.start()
-
-            print("RIB Update: ")
-            print("Count: ",self.counter)
 
     def consumeupdates(self,liveMode):
         readers = []
         for c in self.collectors:
-            readers.append(DataReader(c,self.startts,self.updateCountsUpdates,liveMode,collectionType="Update"))
+            readers.append(DataReader(c,self.startts,liveMode,collectionType="Update"))
 
         for reader in readers:
-            print("Going to start Update update")
-
+            reader.attach(self)
             reader.start()
-
-            print("RIB Update: ")
-            print("Count: ",self.counter)
 
 
     def readrib(self):
