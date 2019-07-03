@@ -24,7 +24,7 @@ class DataReader():
         else:
             self.topicName += "Historic"
 
-        self.consumer = KafkaConsumer(auto_offset_reset="earliest",bootstrap_servers=['localhost:9092'],consumer_timeout_ms=1000,value_deserializer=lambda m: json.loads(m.decode('ascii')))
+        self.consumer = KafkaConsumer(auto_offset_reset="earliest",bootstrap_servers=['localhost:9092'],consumer_timeout_ms=1000,value_deserializer=lambda v: msgpack.unpackb(v, raw=False))
         self.topicPartition = TopicPartition(self.topicName,0)
 
         self.windowSize = 21600*1000 #milliseconds  #6 hours
