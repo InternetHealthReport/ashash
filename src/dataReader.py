@@ -1,5 +1,6 @@
 from kafka import KafkaConsumer
 import json
+import msgpack
 
 from datetime import datetime
 
