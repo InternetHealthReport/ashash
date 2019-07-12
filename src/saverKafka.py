@@ -1,9 +1,7 @@
-from kafka import KafkaProducer, KafkaConsumer
-from kafka.errors import KafkaError
-
-from kafka.structs import TopicPartition
-import json
+from kafka import KafkaProducer
+import msgpack
 import logging
+
 
 class saverKafka(object):
     """Dumps variables to a Kafka cluster."""
@@ -16,24 +14,11 @@ class saverKafka(object):
         self.keepNullHege = keepNullHege
 
         self.producer = KafkaProducer(bootstrap_servers=bootstrapServers, acks=0,
-        value_serializer=lambda v: json.dumps(v).encode('utf-8'),
-        batch_size=65536,linger_ms=4000,compression_type='gzip')
-
-        self.expConsumer = KafkaConsumer(auto_offset_reset="latest",bootstrap_servers=bootstrapServers,consumer_timeout_ms=1000,value_deserializer=lambda m: json.loads(m.decode('ascii')))
-        self.topicPartition = TopicPartition("experiment",0)
-        self.expConsumer.assign([self.topicPartition])
+            key_serializer=lambda k: k.to_bytes(8, byteorder='big'),
+            value_serializer=lambda v: msgpack.packb(v, use_bin_type=True),
+            batch_size=65536, linger_ms=4000, compression_type='snappy')
 
         self.run()
-
-    def getLastExperimentId(self):
-        for message in self.expConsumer:
-            msgAsDict = message.value
-            expid = msgAsDict["id"]
-            print("Experiment Id in topic: ",expid)
-            return expid
-
-        print("No experiments in topic!")
-        return None
 
     def run(self):
         while True:
@@ -50,35 +35,7 @@ class saverKafka(object):
     def save(self, elem):
         t, data = elem
 
-        if t == "experiment":
-            #get last id in experiments table
-            lastExpId = self.getLastExperimentId()
-
-            #if id is None, id = 1 else, increment id by 1
-            if lastExpId is None:
-                self.expid = 1
-            else:
-                self.expid = lastExpId + 1
-
-            #send the new experiment with new id
-            experimentObj = {}
-            experimentObj["id"] = self.expid
-            experimentObj["date"] = str(data[0])
-            experimentObj["cmd"] = data[1]
-            experimentObj["args"] = data[2]
-
-            future = self.producer.send("experiment",experimentObj)
-
-            try:
-                record_metadata = future.get(timeout=10)
-                if self.expid != 1:
-                    logging.warning("Database exists: results will be stored with experiment ID (expid) = %s" % self.expid)
-
-            except KafkaError:
-                logging.error("No experiment inserted for this data")
-                return
-
-        elif t == "hegemony":
+        if t == "hegemony":
             #for each item in hege, send it.
             ts, scope, hege = data
 
@@ -93,9 +50,9 @@ class saverKafka(object):
                     hegeObj["scope"] = scope
                     hegeObj["asn"] = k
                     hegeObj["hege"] = v
-                    hegeObj["experimentId"] = self.expid
 
-                    self.producer.send("hegemony",hegeObj)
+                    self.producer.send("ihr_hegemony_values", 
+                            key=scope, value=hegeObj)
             
         elif t == "graphchange":
             graphChangeObj = {}
@@ -104,9 +61,9 @@ class saverKafka(object):
             graphChangeObj["asn"] = data[2]
             graphChangeObj["nbvote"] = data[3]
             graphChangeObj["diffhege"] = data[4]
-            graphChangeObj["experimentId"] = self.expid
 
-            self.producer.send("graphchange",graphChangeObj)
+            self.producer.send("ihr_hegemony_graphchange", 
+                    key=data[1], value=graphChangeObj)
 
         elif t == "anomalouspath":
             anomalousPathObj = {}
@@ -116,7 +73,6 @@ class saverKafka(object):
             anomalousPathObj["anoasn"] = data[3]
             anomalousPathObj["hegepath"] = data[4]
             anomalousPathObj["score"] = data[5]
-            anomalousPathObj["experimentId"] = self.expid
 
-            self.producer.send("anomalouspath",anomalousPathObj)
+            self.producer.send("ihr_hegemony_anomalouspath",anomalousPathObj)
 
