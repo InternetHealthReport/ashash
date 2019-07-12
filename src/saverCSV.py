@@ -28,6 +28,7 @@ class saverCSV(object):
             if self.saverChain is not None:
                 self.saverChain.put(elem)
 
+
             if isinstance(elem, str) and elem.endswith(";"):
                 pass
             else:
@@ -48,5 +49,6 @@ class saverCSV(object):
                 logging.debug("start recording hegemony")
 
             for val in [(ts, scope, k, v) for k,v in hege.iteritems() if v!=0 or self.keepNullHege ]:
-                self.filepointer.write("%s, %s, %s, %s\n" % val)
+                self.filepointer.write("%, %, %, %\n" % val)
+
 
