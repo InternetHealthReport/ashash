@@ -22,13 +22,19 @@ class saverCSV(object):
 
     def run(self):
 
-        self.filepointer.write("#timestamp, originasn, asn, hegemony\n" % val)
+        self.filepointer.write("#timestamp, originasn, asn, hegemony\n")
         while True:
             elem = self.saverQueue.get()
             if self.saverChain is not None:
                 self.saverChain.put(elem)
 
-            self.save(elem)
+
+            if isinstance(elem, str) and elem.endswith(";"):
+                pass
+            else:
+                self.save(elem)
+                self.filepointer.flush()
+
             self.saverQueue.task_done()
 
 
@@ -44,4 +50,5 @@ class saverCSV(object):
 
             for val in [(ts, scope, k, v) for k,v in hege.iteritems() if v!=0 or self.keepNullHege ]:
                 self.filepointer.write("%, %, %, %\n" % val)
+
 

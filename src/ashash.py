@@ -143,6 +143,7 @@ pc = pathCounter.pathCounter(starttime, endtime, announceQueue, countQueue,
          includedPeers=includedPeers, includedOrigins=includedOrigins,
          excludedOrigins=excludedOrigins, onlyFullFeed=onlyFullFeed,
          txtFile=inputFile, prefixWeight=weights, useKafka=useKafka)
+
 ash = asHegemony.asHegemony(countQueue, hegemonyQueue, alpha=alpha, saverQueue=saverQueue, forceTrim=forceTrim)
 
 saverQueuePostgre = None
@@ -153,12 +154,14 @@ if postgre:
     sp = Process(target=saverPostgresql.saverPostgresql, args=(starttime, af, saverQueuePostgre), name="saverPostgresql")
     sp.start()
 
+
 if saveToKafka:
     logging.info("Will push results to Kafka")
     import saverKafka
     sK = Process(target=saverKafka.saverKafka, args=(['localhost:9092'],saverQueue,saverQueuePostgre,keepNullHege), name="saverKafka")
     sK.start()
 elif 'csv' in argsDict:
+
     filename = None
     if argsDict['csv'] != '':
         filename = argsDict['csv']
@@ -170,7 +173,8 @@ else:
     ss.start()
     saverQueue.put(("experiment", [datetime.now(), str(sys.argv), str(args)]))
 
-for g in gm: 
+
+for g in gm:
     g.start();
 
 if outlierDetection:

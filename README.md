@@ -44,6 +44,11 @@ configuration file allows to select only certain vantage points or certain
 prefixes to monitor.
 See conf/default.ini for an example.
 
+Then you can run the following command (notice that you still have to give start and end dates, the one in the configuration files will be ignored):
+```
+python2 src/ashash.py -C conf/default.ini 2017-11-06T16:00 2017-11-06T22:00
+'''
+
 ## Reading local text files
 
 ### File Format
