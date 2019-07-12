@@ -1,15 +1,16 @@
 from kafka import KafkaConsumer
-import json
 import msgpack
+import logging
+from kafka.structs import TopicPartition
 
-from datetime import datetime
-
-import logging 
-
-from kafka.structs import TopicPartition, OffsetAndTimestamp
 
 class DataReader():
-    def __init__(self,collectorName,startTS,liveMode,collectionType,af=4,includedPeers=[],includedPrefix=[]):
+    '''Read BGP data from Kafka cluster. 
+    
+    Reads 1 day of data, from topics ihr_collectorName_collectionType'''
+
+    def __init__(self, collectorName, startTS, liveMode, collectionType, af=4,
+                 includedPeers=[], includedPrefix=[]):
         self.collector = collectorName
         self.startTS = startTS
         self.liveMode = liveMode
@@ -18,18 +19,17 @@ class DataReader():
         self.includedPeers = includedPeers
         self.includedPrefix = includedPrefix
 
-        self.topicName = collectorName + collectionType 
+        self.topicName = '_'.join('ihr', collectorName, collectionType)
 
-        if liveMode:
-            self.topicName += "Live"
-        else:
-            self.topicName += "Historic"
+        self.consumer = KafkaConsumer(
+            bootstrap_servers=['kafka1:9092', 'kafka2:9092'],
+            # consumer_timeout_ms=1000, 
+            # auto_offset_reset="earliest",
+            value_deserializer=lambda v: msgpack.unpackb(v, raw=False))
 
-        self.consumer = KafkaConsumer(auto_offset_reset="earliest",bootstrap_servers=['localhost:9092'],consumer_timeout_ms=1000,value_deserializer=lambda v: msgpack.unpackb(v, raw=False))
-        self.topicPartition = TopicPartition(self.topicName,0)
-
-        self.windowSize = 21600*1000 #milliseconds  #6 hours
-
+        self.topicPartition = TopicPartition(self.topicName, 0)
+        # 24 hours in milliseconds
+        self.windowSize = 86400*1000
         self.observers = []
 
     def attach(self,observer):
@@ -38,25 +38,25 @@ class DataReader():
 
     def performUpdate(self,data):
         for observer in self.observers:
-            if self.collectionType == "RIB":
+            if self.collectionType == "rib":
                 observer.updateCountsRIB(data)
             else:
                 observer.updateCountsUpdates(data)
 
     def start(self):
-        #seek the timestamp in consumer
-
-        if self.collectionType == "RIB":
+        # seek the timestamp in consumer
+        if self.collectionType == "rib":
             timestampToSeek = (self.startTS - 3600)*1000
         else:
             timestampToSeek = self.startTS * 1000
 
-        if self.collectionType == "RIB":
+        if self.collectionType == "rib":
             timestampToBreakAt = (self.startTS + 3600)*1000
         else:
             timestampToBreakAt = timestampToSeek + self.windowSize
 
-        print(self.collectionType," ,Time Start: ",timestampToSeek,"Time End: ",timestampToBreakAt)
+        logging.warning(self.collectionType, " ,Time Start: ", timestampToSeek, 
+                        "Time End: ", timestampToBreakAt)
 
         offsets = self.consumer.offsets_for_times({self.topicPartition:timestampToSeek})
         theOffset = offsets[self.topicPartition].offset
@@ -65,7 +65,6 @@ class DataReader():
             return
 
         self.consumer.assign([self.topicPartition])
-
         self.consumer.seek(self.topicPartition,theOffset)
 
         for message in self.consumer:
@@ -75,12 +74,5 @@ class DataReader():
             if messageTimestamp > timestampToBreakAt:
                 break
 
-            """
-            msgAsString = message.value.decode("utf-8")
-
-            msgAsDict = json.loads(msgAsString)"""
-
-            msgAsDict = message.value
-
-            self.performUpdate(msgAsDict)
+            self.performUpdate(message.value)
             

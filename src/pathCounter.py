@@ -1,15 +1,11 @@
-from subprocess import Popen, PIPE
-import os
-import glob
 import radix
 from collections import defaultdict
 from datetime import datetime
 import threading
-import copy
 import logging
 import txtReader
 
-from _pybgpstream import BGPStream, BGPRecord, BGPElem
+from _pybgpstream import BGPStream, BGPRecord
 
 from dataReader import DataReader
 
@@ -27,11 +23,13 @@ def dt2ts(dt):
     return (dt - datetime(1970, 1, 1)).total_seconds()
 
 
-
 class pathCounter(threading.Thread):
+    '''This is the main function that keep track of AS paths for each prefix,
+    and update it based on BGP messages.'''
 
-    def __init__(self, starttime, endtime, announceQueue, countQueue, ribQueue, 
-            spatialResolution=1, af=4, timeWindow=900, #asnFilter=None, 
+    def __init__(
+            self, starttime, endtime, announceQueue, countQueue, ribQueue, 
+            spatialResolution=1, af=4, timeWindow=900, 
             collectors=[ "route-views.linx", "route-views3", "rrc00", "rrc10"],
             includedPeers=[], excludedPeers=[], includedOrigins=[], excludedOrigins=[], 
             onlyFullFeed=True, txtFile=None, prefixWeight=None, useKafka=0):
@@ -440,7 +438,7 @@ class pathCounter(threading.Thread):
     def consumerib(self):
         readers = []
         for c in self.collectors:
-            readers.append(DataReader(c,self.startts,False,collectionType="RIB"))
+            readers.append(DataReader(c, self.startts, False, collectionType="rib"))
 
         for reader in readers:
             reader.attach(self)
@@ -449,12 +447,11 @@ class pathCounter(threading.Thread):
     def consumeupdates(self,liveMode):
         readers = []
         for c in self.collectors:
-            readers.append(DataReader(c,self.startts,liveMode,collectionType="Update"))
+            readers.append(DataReader(c, self.startts, liveMode, collectionType="update"))
 
         for reader in readers:
             reader.attach(self)
             reader.start()
-
 
     def readrib(self):
         stream = None
