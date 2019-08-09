@@ -13,6 +13,8 @@ years = range(int(sys.argv[2]), int(sys.argv[3])+1)
 months = range(1,13)
 days = [4,11,18,25] #1,8,15,22
 
+start=False
+
 af = int(sys.argv[1])
 
 if af == 4:
@@ -28,6 +30,12 @@ print "IPv%s, spatial resolution=%s" % (af, spatialResolution)
 for ye in years:
     for mo in months:
         for da in days:
+            if ye == 2016 and mo==10 and da==11:
+                start = True
+
+            if not start:
+                continue
+
             cmd = "python2 scripts/ihrOneShot.py {} {} {} {}".format(af, ye, mo, da)
             print(cmd)
             os.system(cmd)
