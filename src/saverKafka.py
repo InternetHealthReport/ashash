@@ -6,10 +6,10 @@ import logging
 class saverKafka(object):
     """Dumps variables to a Kafka cluster."""
 
-    def __init__(self, bootstrapServers, saverQueue, saverChain, keepNullHege=False):     
+    def __init__(self, bootstrapServers, af, saverQueue, saverChain, keepNullHege=False):     
         self.saverQueue = saverQueue
         self.saverChain = saverChain
-        self.expid = None
+        self.af = af
         self.prevts = -1
         self.keepNullHege = keepNullHege
 
@@ -51,7 +51,7 @@ class saverKafka(object):
                     hegeObj["asn"] = k
                     hegeObj["hege"] = v
 
-                    self.producer.send("ihr_hegemony_values", 
+                    self.producer.send("ihr_hegemony_values_ipv{}".format(self.af), 
                             key=scope, value=hegeObj)
             
         elif t == "graphchange":
