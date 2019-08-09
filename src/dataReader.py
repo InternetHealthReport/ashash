@@ -19,7 +19,7 @@ class DataReader():
         self.includedPeers = includedPeers
         self.includedPrefix = includedPrefix
 
-        self.topicName = '_'.join('ihr', collectorName, collectionType)
+        self.topicName = '_'.join(['ihr', collectorName, collectionType])
 
         self.consumer = KafkaConsumer(
             bootstrap_servers=['kafka1:9092', 'kafka2:9092'],

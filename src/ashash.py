@@ -158,11 +158,7 @@ if postgre:
 if saveToKafka:
     logging.info("Will push results to Kafka")
     import saverKafka
-<<<<<<< HEAD
-    sK = Process(target=saverKafka.saverKafka, args=(['kafka1:9092', 'kafka2:9092'],saverQueue,saverQueuePostgre,keepNullHege), name="saverKafka")
-=======
     sK = Process(target=saverKafka.saverKafka, args=(['kafka1:9092','kafka2:9092'], af, saverQueue,saverQueuePostgre,keepNullHege), name="saverKafka")
->>>>>>> 8bb7cb87597f8932491825b78d188a02e6e210ff
     sK.start()
 elif 'csv' in argsDict:
 
