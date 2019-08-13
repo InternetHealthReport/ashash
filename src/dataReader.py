@@ -23,7 +23,7 @@ class DataReader():
 
         self.consumer = KafkaConsumer(
             bootstrap_servers=['kafka1:9092', 'kafka2:9092', 'kafka3:9092'],
-            # consumer_timeout_ms=1000, 
+            consumer_timeout_ms=60000, 
             # auto_offset_reset="earliest",
             value_deserializer=lambda v: msgpack.unpackb(v, raw=False))
 
