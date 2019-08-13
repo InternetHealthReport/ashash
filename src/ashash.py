@@ -99,7 +99,7 @@ except OSError as exc: # Guard against race condition
         raise
 
 FORMAT = '%(asctime)s %(processName)s %(message)s'
-logging.basicConfig(format=FORMAT, filename=output+'log_%s.log' % starttime, level=logging.DEBUG, datefmt='%Y-%m-%d %H:%M:%S')
+logging.basicConfig(format=FORMAT, filename=output+'log_%s.log' % starttime, level=logging.WARNING, datefmt='%Y-%m-%d %H:%M:%S')
 logging.info("Started: %s" % sys.argv)
 logging.info("Arguments: %s" % args)
 for sec in config_parser.sections():

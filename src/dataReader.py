@@ -19,10 +19,10 @@ class DataReader():
         self.includedPeers = includedPeers
         self.includedPrefix = includedPrefix
 
-        self.topicName = '_'.join(['ihr', collectorName, collectionType])
+        self.topicName = '_'.join(['ihr', 'bgp', collectorName, collectionType])
 
         self.consumer = KafkaConsumer(
-            bootstrap_servers=['kafka1:9092', 'kafka2:9092'],
+            bootstrap_servers=['kafka1:9092', 'kafka2:9092', 'kafka3:9092'],
             # consumer_timeout_ms=1000, 
             # auto_offset_reset="earliest",
             value_deserializer=lambda v: msgpack.unpackb(v, raw=False))
@@ -38,25 +38,25 @@ class DataReader():
 
     def performUpdate(self,data):
         for observer in self.observers:
-            if self.collectionType == "rib":
+            if self.collectionType == "ribs":
                 observer.updateCountsRIB(data)
             else:
                 observer.updateCountsUpdates(data)
 
     def start(self):
         # seek the timestamp in consumer
-        if self.collectionType == "rib":
+        if self.collectionType == "ribs":
             timestampToSeek = (self.startTS - 3600)*1000
         else:
             timestampToSeek = self.startTS * 1000
 
-        if self.collectionType == "rib":
+        if self.collectionType == "ribs":
             timestampToBreakAt = (self.startTS + 3600)*1000
         else:
             timestampToBreakAt = timestampToSeek + self.windowSize
 
-        logging.warning(self.collectionType, " ,Time Start: ", timestampToSeek, 
-                        "Time End: ", timestampToBreakAt)
+        logging.warning("{} ,Time Start: {}, Time End: {}".format(
+            self.collectionType, timestampToSeek, timestampToBreakAt))
 
         offsets = self.consumer.offsets_for_times({self.topicPartition:timestampToSeek})
         theOffset = offsets[self.topicPartition].offset
