@@ -30,18 +30,10 @@ class DataReader():
         self.topicPartition = TopicPartition(self.topicName, 0)
         # 24 hours in milliseconds
         self.windowSize = 86400*1000
-        self.observers = []
+        self.observer = None 
 
     def attach(self,observer):
-        if observer not in self.observers:
-            self.observers.append(observer)
-
-    def performUpdate(self,data):
-        for observer in self.observers:
-            if self.collectionType == "ribs":
-                observer.updateCountsRIB(data)
-            else:
-                observer.updateCountsUpdates(data)
+        self.observer = observer
 
     def start(self):
         # seek the timestamp in consumer
@@ -67,6 +59,12 @@ class DataReader():
         self.consumer.assign([self.topicPartition])
         self.consumer.seek(self.topicPartition,theOffset)
 
+        dataHandler = None
+        if self.collectionType == "ribs":
+            dataHandler = self.observer.updateCountsRIB
+        else:
+            dataHandler = self.observer.updateCountsUpdates
+
         for message in self.consumer:
             #Convert message to JSON before handler function call
             messageTimestamp = message.timestamp
@@ -74,5 +72,5 @@ class DataReader():
             if messageTimestamp > timestampToBreakAt:
                 break
 
-            self.performUpdate(message.value)
+            dataHandler(message.value)
             
