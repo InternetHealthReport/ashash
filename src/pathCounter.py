@@ -219,10 +219,12 @@ class pathCounter(threading.Thread):
             zPfx = element["fields"]["prefix"]
             sPath = element["fields"]["as-path"]
 
-            if zPfx == "0.0.0.0/0" or zPfx in self.excludedPrefix or (len(self.includedPrefix) and zPfx not in self.includedPrefix):
-                continue
-
+            # ignore records with the wrong address family
             if ('.' in zPfx and self.af == 6)  or (':' in zPfx and self.af == 4):
+                break
+
+            # Filter out undesired prefixes
+            if zPfx == "0.0.0.0/0" or zPfx in self.excludedPrefix or (len(self.includedPrefix) and zPfx not in self.includedPrefix):
                 continue
 
             path = sPath.split(" ")
