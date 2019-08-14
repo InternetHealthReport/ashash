@@ -47,8 +47,8 @@ class DataReader():
         else:
             timestampToBreakAt = timestampToSeek + self.windowSize
 
-        logging.warning("{} ,Time Start: {}, Time End: {}".format(
-            self.collectionType, timestampToSeek, timestampToBreakAt))
+        logging.warning("{}, start: {}, end: {}".format(
+            self.topicName, timestampToSeek, timestampToBreakAt))
 
         offsets = self.consumer.offsets_for_times({self.topicPartition:timestampToSeek})
         theOffset = offsets[self.topicPartition].offset
