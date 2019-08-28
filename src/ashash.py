@@ -12,15 +12,6 @@ from multiprocessing import Pipe as mpPipe
 from multiprocessing import JoinableQueue as mpQueue
 from multiprocessing import Process
 
-import pathCounter
-import asHegemony
-import pathMonitor
-# import graphMonitor
-import saverSQLite
-import saverCSV
-import asGraph
-# import outlierDetection
-
 def valid_date(s):
     try:
         return datetime.strptime(s+"UTC", "%Y-%m-%dT%H:%M%Z")
@@ -46,8 +37,8 @@ parser.add_argument("-w", "--window", help="Time window: time resolution in seco
 parser.add_argument("-o", "--output", help="output directory")
 parser.add_argument("-f", "--inputFile", help="txt input file", type=str)
 parser.add_argument("-n", "--keepNullHege", help="Record AS with hegemony equal to zero (discarded by default)" )
-parser.add_argument("-k", "--kafka", help="Read data from Kafka", type=str)
-parser.add_argument("-sK", "--saveToKafka", help="send results to Kafka cluster", type=str)
+parser.add_argument("-k", "--kafka", help="Read data from Kafka")
+parser.add_argument("-sK", "--saveToKafka", help="send results to Kafka cluster")
 parser.add_argument("starttime", help="UTC start time, e.g. 2017-10-17T00:00 (should correspond to a date and time when RIB files are available)",  type=str)
 parser.add_argument("endtime", help="UTC end time", type=str)
 args = parser.parse_args()
@@ -99,11 +90,21 @@ except OSError as exc: # Guard against race condition
         raise
 
 FORMAT = '%(asctime)s %(processName)s %(message)s'
-logging.basicConfig(format=FORMAT, filename=output+'log_%s.log' % starttime, level=logging.WARNING, datefmt='%Y-%m-%d %H:%M:%S')
+logging.basicConfig(format=FORMAT, filename=output+'log_%s.log' % starttime, level=logging.DEBUG, datefmt='%Y-%m-%d %H:%M:%S')
 logging.info("Started: %s" % sys.argv)
 logging.info("Arguments: %s" % args)
 for sec in config_parser.sections():
     logging.info("Config: [%s] %s" % (sec,config_parser.items(sec,False,argsDict)))
+
+# Import modules 
+import pathCounter
+import asHegemony
+import pathMonitor
+# import graphMonitor
+import saverSQLite
+import saverCSV
+import asGraph
+# import outlierDetection
 
 # Initialisation
 ribQueue = None

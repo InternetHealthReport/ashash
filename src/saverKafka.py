@@ -7,6 +7,8 @@ class saverKafka(object):
     """Dumps variables to a Kafka cluster."""
 
     def __init__(self, bootstrapServers, af, saverQueue, saverChain, keepNullHege=False):     
+        print('starting Kafka saver')
+
         self.saverQueue = saverQueue
         self.saverChain = saverChain
         self.af = af

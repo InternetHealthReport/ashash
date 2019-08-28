@@ -11,6 +11,9 @@ class DataReader():
 
     def __init__(self, collectorName, startTS, liveMode, collectionType, af=4,
                  includedPeers=[], includedPrefix=[]):
+
+        print('starting Kafka reader')
+
         self.collector = collectorName
         self.startTS = startTS
         self.liveMode = liveMode
