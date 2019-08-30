@@ -90,7 +90,7 @@ except OSError as exc: # Guard against race condition
         raise
 
 FORMAT = '%(asctime)s %(processName)s %(message)s'
-logging.basicConfig(format=FORMAT, filename=output+'log_%s.log' % starttime, level=logging.DEBUG, datefmt='%Y-%m-%d %H:%M:%S')
+logging.basicConfig(format=FORMAT, filename=output+'log_%s.log' % starttime, level=logging.WARN, datefmt='%Y-%m-%d %H:%M:%S')
 logging.info("Started: %s" % sys.argv)
 logging.info("Arguments: %s" % args)
 for sec in config_parser.sections():
@@ -159,8 +159,8 @@ if postgre:
 if saveToKafka:
     logging.info("Will push results to Kafka")
     import saverKafka
-    sK = Process(target=saverKafka.saverKafka, args=(['kafka1:9092','kafka2:9092'], af, saverQueue,saverQueuePostgre,keepNullHege), name="saverKafka")
-    sK.start()
+    ss = Process(target=saverKafka.saverKafka, args=(['kafka1:9092','kafka2:9092'], af, saverQueue,saverQueuePostgre,keepNullHege), name="saverKafka")
+    ss.start()
 elif 'csv' in argsDict:
 
     filename = None

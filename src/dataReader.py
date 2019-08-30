@@ -1,8 +1,8 @@
-from kafka import KafkaConsumer
+# from kafka import KafkaConsumer
+from confluent_kafka import Consumer, TopicPartition, KafkaError
+import confluent_kafka 
 import msgpack
 import logging
-from kafka.structs import TopicPartition
-
 
 class DataReader():
     '''Read BGP data from Kafka cluster. 
@@ -12,7 +12,7 @@ class DataReader():
     def __init__(self, collectorName, startTS, liveMode, collectionType, af=4,
                  includedPeers=[], includedPrefix=[]):
 
-        print('starting Kafka reader')
+        logging.warning('starting Kafka reader')
 
         self.collector = collectorName
         self.startTS = startTS
@@ -22,15 +22,17 @@ class DataReader():
         self.includedPeers = includedPeers
         self.includedPrefix = includedPrefix
 
-        self.topicName = '_'.join(['ihr', 'bgp', collectorName, collectionType])
+        self.topic = '_'.join(['ihr', 'bgp', collectorName, collectionType])
 
-        self.consumer = KafkaConsumer(
-            bootstrap_servers=['kafka1:9092', 'kafka2:9092', 'kafka3:9092'],
-            consumer_timeout_ms=60000, 
-            # auto_offset_reset="earliest",
-            value_deserializer=lambda v: msgpack.unpackb(v, raw=False))
+        self.consumer = Consumer({
+            'bootstrap.servers': 'kafka1:9092, kafka2:9092, kafka3:9092',
+            'group.id': 'ihr_ashegemony_reader0',
+            'auto.offset.reset': 'earliest',
+            #'max.poll.interval.ms': 1800*1000,
+        })
 
-        self.topicPartition = TopicPartition(self.topicName, 0)
+        self.consumer.subscribe([self.topic])
+
         # 24 hours in milliseconds
         self.windowSize = 86400*1000
         self.observer = None 
@@ -51,29 +53,45 @@ class DataReader():
             timestampToBreakAt = timestampToSeek + self.windowSize
 
         logging.warning("{}, start: {}, end: {}".format(
-            self.topicName, timestampToSeek, timestampToBreakAt))
+            self.topic, timestampToSeek, timestampToBreakAt))
 
-        offsets = self.consumer.offsets_for_times({self.topicPartition:timestampToSeek})
-        theOffset = offsets[self.topicPartition].offset
+        logging.debug("look for offset: {}".format(timestampToSeek))
+        # Set offsets according to start time
+        topic_info = self.consumer.list_topics(self.topic)
+        partitions = [TopicPartition(self.topic, partition_id, timestampToSeek) 
+                for partition_id in  topic_info.topics[self.topic].partitions.keys()]
+        logging.warning("partitions: {}".format(partitions))
 
-        if theOffset is None:
-            return
-
-        self.consumer.assign([self.topicPartition])
-        self.consumer.seek(self.topicPartition,theOffset)
+        offsets = self.consumer.offsets_for_times(partitions)
+        self.consumer.poll()
+        for offset in offsets:
+            logging.info('set offset: {}'.format(offset))
+            self.consumer.seek(offset)
 
         dataHandler = None
+        timeout = 600
         if self.collectionType == "ribs":
             dataHandler = self.observer.updateCountsRIB
+            timeout = 60
         else:
             dataHandler = self.observer.updateCountsUpdates
 
-        for message in self.consumer:
-            #Convert message to JSON before handler function call
-            messageTimestamp = message.timestamp
+        logging.debug('enter in consumer loop')
+        while True:
+            msg = self.consumer.poll(timeout)
 
-            if messageTimestamp > timestampToBreakAt:
+            if msg is None:
+                logging.debug('Timeout')
                 break
 
-            dataHandler(message.value)
-            
+            if msg.error():
+                logging.error("Consumer error: {}".format(msg.error()))
+                continue
+
+            ts = msg.timestamp()
+            if ts[0] == confluent_kafka.TIMESTAMP_CREATE_TIME and ts[1] >= timestampToBreakAt:
+                logging.debug('Read all data')
+                break
+
+            val = msgpack.unpackb(msg.value(), raw=False)
+            dataHandler(val)
