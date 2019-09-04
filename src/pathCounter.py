@@ -30,7 +30,7 @@ class pathCounter(threading.Thread):
     def __init__(
             self, starttime, endtime, announceQueue, countQueue, ribQueue, 
             spatialResolution=1, af=4, timeWindow=900, 
-            collectors=[ "route-views.linx", "route-views2", "rrc00", "rrc10"],
+            collectors=[ "route-views.linx", "route-views2", "rrc10", "rrc00"],
             includedPeers=[], excludedPeers=[], includedOrigins=[], excludedOrigins=[], 
             onlyFullFeed=True, txtFile=None, prefixWeight=None, useKafka=0):
 

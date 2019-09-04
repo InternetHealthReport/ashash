@@ -26,7 +26,7 @@ class DataReader():
 
         self.consumer = Consumer({
             'bootstrap.servers': 'kafka1:9092, kafka2:9092, kafka3:9092',
-            'group.id': 'ihr_ashegemony_reader0',
+            'group.id': 'ihr_ashegemony_reader1',
             'auto.offset.reset': 'earliest',
             'max.poll.interval.ms': 900*1000,
         })
