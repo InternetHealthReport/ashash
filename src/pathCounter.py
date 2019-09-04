@@ -95,7 +95,7 @@ class pathCounter(threading.Thread):
                 continue
             self.peersPerASN[list(a)[0]].append(p)
 
-        logging.debug("(pathCounter) %s " % self.peersASN)
+        logging.info("(pathCounter) %s " % self.peersASN)
         self.cleanUnusedCounts()
 
         logging.info("Reading UPDATE files...")
@@ -131,8 +131,8 @@ class pathCounter(threading.Thread):
                 nbPrefixes[peer] += 1
 
         res = set([peer for peer, nbPfx in nbPrefixes.iteritems() if nbPfx>len(nodes)*threshold])
-        logging.debug("(pathCounter) Using %s peers out of %s (threshold=%s)" % (len(res), len(nbPrefixes), threshold))
-        logging.debug("(pathCounter) Number of prefixes: %s" % (len(nodes)))
+        logging.info("(pathCounter) Using %s peers out of %s (threshold=%s)" % (len(res), len(nbPrefixes), threshold))
+        logging.info("(pathCounter) Number of prefixes: %s" % (len(nodes)))
 
         return res
 
@@ -173,13 +173,13 @@ class pathCounter(threading.Thread):
 
 
     def slideTimeWindow(self,ts):
-        logging.debug("(pathCounter) sliding window... (ts=%s)" % self.ts)
+        logging.info("(pathCounter) sliding window... (ts=%s)" % self.ts)
         self.ts = ts
 
         self.countQueue.put( (self.ts, self.peersPerASN, self.counter) )
         self.countQueue.join()
         
-        logging.debug("(pathCounter) window slided (ts=%s)" % self.ts)
+        logging.info("(pathCounter) window slided (ts=%s)" % self.ts)
 
 
     def incTotalCount(self, count, peerip, origAS, zAS):

@@ -18,6 +18,7 @@ class saverKafka(object):
 
         # Create producer
         self.producer = Producer({'bootstrap.servers': 'kafka1:9092,kafka2:9092,kafka3:9092',
+            'queue.buffering.max.messages': 1000000,
             'default.topic.config': {'compression.codec': 'snappy'}}) 
 
         self.run()
