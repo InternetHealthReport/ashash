@@ -29,8 +29,8 @@ class saverKafka(object):
             if self.saverChain is not None:
                 self.saverChain.put(elem)
             if isinstance(elem, str) and elem.endswith(";"):
-                #Unhandled
-                print("Cannot save item: ",elem)
+                # Ignore transaction and commit messages for psql
+                pass
             else:
                 self.save(elem)
             self.saverQueue.task_done()
