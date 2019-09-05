@@ -101,7 +101,7 @@ class pathCounter(threading.Thread):
         logging.info("Reading UPDATE files...")
         if self.startts != self.endts:
             if self.useKafka:
-                self.consumeupdates(liveMode=False)
+                self.consumeupdates()
             else:
                 self.readupdates()
         else:
@@ -316,7 +316,7 @@ class pathCounter(threading.Thread):
 
             elif self.ts > msgTs:
                 #Old update, ignore this to update the graph
-                logging.warn("Ignoring old update (peer IP: %s, timestamp: %s, current time bin: %s): %s" % (zOrig, zDt, self.ts, (elem.type, zAS, elem.fields)))
+                logging.warn("Ignoring old update (peer IP: %s, timestamp: %s, current time bin: %s): %s" % (zOrig, zDt, self.ts, (element['type'], zAS, element['fields'])))
                 continue
 
             node = self.rtree.search_exact(zPfx)
@@ -444,22 +444,22 @@ class pathCounter(threading.Thread):
                     self.incTotalCount(count,  zOrig, origAS, zAS)
 
     def consumerib(self):
-        readers = []
-        for c in self.collectors:
-            readers.append(DataReader(c, self.startts, False, collectionType="ribs"))
+        reader = DataReader(
+                self.collectors, 'ribs', self.af, 
+                self.startts-3600, self.startts+3600, 3600*2,
+                self.updateCountsRIB
+                )
 
-        for reader in readers:
-            reader.attach(self)
-            reader.start()
+        reader.start()
 
-    def consumeupdates(self,liveMode):
-        readers = []
-        for c in self.collectors:
-            readers.append(DataReader(c, self.startts, liveMode, collectionType="updates"))
-
-        for reader in readers:
-            reader.attach(self)
-            reader.start()
+    def consumeupdates(self):
+        reader = DataReader(
+                self.collectors, 'updates', self.af, 
+                self.startts, self.endts, self.timeWindow,
+                self.updateCountsUpdates
+                )
+                    
+        reader.start()
 
     def readrib(self):
         stream = None
