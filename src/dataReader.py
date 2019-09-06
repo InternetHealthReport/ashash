@@ -81,7 +81,7 @@ class DataReader():
             ts = msg.timestamp()
             val = msgpack.unpackb(msg.value(), raw=False)
             
-            if ts[0] == confluent_kafka.TIMESTAMP_CREATE_TIME and ts[1] > self.timestampToBreakAt:
+            if ts[0] == confluent_kafka.TIMESTAMP_CREATE_TIME and ts[1] >= self.timestampToBreakAt:
                 logging.warning('Stop partition {} for {}.'.format(msg.partition(), msg.topic()))
                 self.consumer.pause([TopicPartition(msg.topic(), msg.partition())])
                 self.partitionStopped += 1
@@ -91,7 +91,7 @@ class DataReader():
                     break
                 
             # We got all data for this partition, pause it
-            if ts[0] == confluent_kafka.TIMESTAMP_CREATE_TIME and ts[1] > self.currentTimebin + self.windowSize:
+            if ts[0] == confluent_kafka.TIMESTAMP_CREATE_TIME and ts[1] >= self.currentTimebin + self.windowSize:
                 logging.warning('Pause partition {} for {}.'.format(msg.partition(), msg.topic()))
                 self.consumer.pause([TopicPartition(msg.topic(), msg.partition())])
                 self.partitionPaused += 1
