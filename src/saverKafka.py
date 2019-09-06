@@ -49,10 +49,10 @@ class saverKafka(object):
             for k,v in hege.iteritems():
                 if v!=0 or self.keepNullHege:
                     hegeObj = {}
-                    hegeObj["ts"] = ts
-                    hegeObj["scope"] = scope
-                    hegeObj["asn"] = k
-                    hegeObj["hege"] = v
+                    hegeObj[u"ts"] = ts
+                    hegeObj[u"scope"] = scope
+                    hegeObj[u"asn"] = k
+                    hegeObj[u"hege"] = v
 
                     self.producer.produce(
                             self.topic,
