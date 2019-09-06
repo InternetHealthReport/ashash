@@ -298,6 +298,9 @@ class pathCounter(threading.Thread):
             if zAS in self.excludedPeers or (len(self.includedPeers) and zAS not in self.includedPeers):
                 continue
 
+            if 'prefix' not in element['fields']:
+                continue
+
             zPfx = element["fields"]["prefix"]
             if zPfx == "0.0.0.0/0" or zPfx in self.excludedPrefix or (len(self.includedPrefix) and zPfx not in self.includedPrefix):
                 continue
