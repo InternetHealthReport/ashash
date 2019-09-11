@@ -174,7 +174,7 @@ class pathCounter(threading.Thread):
 
     def slideTimeWindow(self,ts):
         logging.info("(pathCounter) sliding window... (ts=%s)" % self.ts)
-        self.ts = ts
+        self.ts = int(ts/self.timeWindow)*self.timeWindow
 
         self.countQueue.put( (self.ts, self.peersPerASN, self.counter) )
         self.countQueue.join()
@@ -299,6 +299,7 @@ class pathCounter(threading.Thread):
                 continue
 
             if 'prefix' not in element['fields']:
+                logging.warning('no prefix given! {}')
                 continue
 
             zPfx = element["fields"]["prefix"]
