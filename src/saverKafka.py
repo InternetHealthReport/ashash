@@ -1,4 +1,5 @@
 from confluent_kafka import Producer
+from confluent_kafka.admin import AdminClient, NewTopic
 import msgpack
 import logging
 
@@ -15,6 +16,17 @@ class saverKafka(object):
         self.prevts = -1
         self.keepNullHege = keepNullHege
         self.topic = "ihr_hegemony_values_ipv{}".format(self.af)
+
+        admin_client = AdminClient({'bootstrap.servers':'kafka1:9092, kafka2:9092, kafka3:9092'})
+        topic_list = [NewTopic(self.topic, num_partitions=1, replication_factor=2)]
+        admin_client.create_topics(topic_list)
+        created_topic = admin_client.create_topics(topic_list)
+        for topic, f in created_topic.items():
+            try:
+                f.result()  # The result itself is None
+                logging.warning("Topic {} created".format(topic))
+            except Exception as e:
+                logging.warning("Failed to create topic {}: {}".format(topic, e))
 
         # Create producer
         self.producer = Producer({'bootstrap.servers': 'kafka1:9092,kafka2:9092,kafka3:9092',

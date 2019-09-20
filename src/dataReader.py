@@ -98,7 +98,6 @@ class DataReader():
             if ts[0] == confluent_kafka.TIMESTAMP_CREATE_TIME and ts[1] >= self.currentTimebin + self.windowSize:
                 logging.warning('Pause partition {} for {} ts={}.({}, {})'.format(msg.partition(), msg.topic(), ts[1], self.currentTimebin, self.currentTimebin+self.windowSize))
                 tp = TopicPartition(msg.topic(), msg.partition(), msg.offset())
-                self.consumer.commit(offsets=[tp], asynchronous=False)
                 self.consumer.pause([tp])
                 self.partitionPaused.add(tp) 
                 if len(self.partitionPaused) < self.partitionTotal:
@@ -111,8 +110,12 @@ class DataReader():
                     for qval in self.queuedMessages:
                         self.dataCallback(qval)
                     logging.warning('pushed queued messages')
-                    self.queueMessages = []
-                    self.consumer.resume(list(self.partitionPaused))
+
+                    # Initialisation for a new time bin
+                    tps = list(self.partitionPaused)
+                    self.consumer.commit(offsets=tps)
+                    self.queuedMessages = []
+                    self.consumer.resume(tps)
                     self.partitionPaused = set()
                     self.partitionStopped = set()
 
