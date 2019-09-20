@@ -288,6 +288,9 @@ class pathCounter(threading.Thread):
         elements = data["elements"]
 
         for element in elements:
+            if element['type'] != "A":
+                continue
+
             zOrig = element["peer_address"]
 
             if  zOrig not in self.peers:
@@ -296,10 +299,6 @@ class pathCounter(threading.Thread):
 
             zAS = element["peer_asn"]
             if zAS in self.excludedPeers or (len(self.includedPeers) and zAS not in self.includedPeers):
-                continue
-
-            if 'prefix' not in element['fields']:
-                logging.warning('no prefix given! {}')
                 continue
 
             zPfx = element["fields"]["prefix"]

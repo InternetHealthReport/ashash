@@ -14,7 +14,7 @@ af = int(sys.argv[1])
 today = datetime.utcnow()
 ye = today.year
 mo = today.month
-da = today.day 
+da = today.day -1
 
 if af == 4:
     spatialResolution = 1

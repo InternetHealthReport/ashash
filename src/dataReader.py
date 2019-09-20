@@ -34,9 +34,9 @@ class DataReader():
                 for collector in self.collectors]
 
         self.timestampToSeek = self.startTS * 1000
-        self.currentTimebin = self.startTS * 1000
+        self.currentTimebin = int(self.startTS/windowSize)*windowSize * 1000
         self.timestampToBreakAt = self.endTS * 1000
-        self.partitionPaused = 0
+        self.partitionPaused = set()
         self.partitionStopped = 0
         self.partitionTotal = 0
 
@@ -44,6 +44,7 @@ class DataReader():
             'bootstrap.servers': 'kafka1:9092, kafka2:9092, kafka3:9092',
             'group.id': 'ihr_ashegemony_reader_'+self.collectionType,
             'max.poll.interval.ms': 900*1000,
+            'enable.auto.commit': 'false',
         })
 
         self.consumer.subscribe(self.topics, on_assign=self.on_assign)
@@ -80,6 +81,9 @@ class DataReader():
 
             ts = msg.timestamp()
             val = msgpack.unpackb(msg.value(), raw=False)
+
+            if len(val['elements']) == 0:
+                continue
             
             if ts[0] == confluent_kafka.TIMESTAMP_CREATE_TIME and ts[1] >= self.timestampToBreakAt:
                 logging.warning('Stop partition {} for {}.'.format(msg.partition(), msg.topic()))
@@ -92,23 +96,28 @@ class DataReader():
                 
             # We got all data for this partition, pause it
             if ts[0] == confluent_kafka.TIMESTAMP_CREATE_TIME and ts[1] >= self.currentTimebin + self.windowSize:
-                logging.warning('Pause partition {} for {}.'.format(msg.partition(), msg.topic()))
-                self.consumer.pause([TopicPartition(msg.topic(), msg.partition())])
-                self.partitionPaused += 1
-                if self.partitionPaused < self.partitionTotal:
+                logging.warning('Pause partition {} for {} ts={}.({}, {})'.format(msg.partition(), msg.topic(), ts[1], self.currentTimebin, self.currentTimebin+self.windowSize))
+                tp = TopicPartition(msg.topic(), msg.partition(), msg.offset())
+                self.consumer.commit(offsets=[tp], asynchronous=False)
+                self.consumer.pause([tp])
+                self.partitionPaused.add(tp) 
+                if len(self.partitionPaused) < self.partitionTotal:
                     self.queuedMessages.append(val)
                     continue
                 else:
-                    logging.warning('Resume partitions {}.'.format(self.consumer.assignment()))
+                    logging.warning('Resume partitions {} ({}, {}).'.format(self.consumer.assignment(), self.currentTimebin, self.currentTimebin+self.windowSize))
                     # Send queued messages and resume consumer
                     self.currentTimebin += self.windowSize
                     for qval in self.queuedMessages:
                         self.dataCallback(qval)
+                    logging.warning('pushed queued messages')
                     self.queueMessages = []
-                    self.partitionPaused = 0
-                    self.partitionStopped = 0
-                    self.consumer.resume(self.consumer.assignment())
+                    self.consumer.resume(list(self.partitionPaused))
+                    self.partitionPaused = set()
+                    self.partitionStopped = set()
 
             self.dataCallback(val)
 
         self.consumer.close()
+
+
