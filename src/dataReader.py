@@ -117,7 +117,7 @@ class DataReader():
                     self.queuedMessages = []
                     self.consumer.resume(tps)
                     self.partitionPaused = set()
-                    self.partitionStopped = set()
+                    self.partitionStopped = 0
 
             self.dataCallback(val)
 
