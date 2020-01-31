@@ -22,9 +22,9 @@ class DataReader():
         self.collectionType = collectionType
         self.af = af
         if collectionType == 'ribs':
-            self.timeout = 60
+            self.timeout = 600
         else:
-            self.timeout = windowSize
+            self.timeout = 0
 
         self.windowSize = windowSize * 1000
         self.dataCallback = dataCallback 
@@ -68,6 +68,7 @@ class DataReader():
         '''Consume data for all collectors by chunk of length windowSize'''
 
         logging.info('enter in consumer loop')
+        nb_messages = 0
         while True:
             msg = self.consumer.poll(self.timeout)
 
@@ -81,8 +82,10 @@ class DataReader():
 
             ts = msg.timestamp()
             val = msgpack.unpackb(msg.value(), raw=False)
-
-            if len(val['elements']) == 0:
+            nb_messages += 1
+ 
+            if (len(val['elements']) == 0 or 
+                    (ts[0] == confluent_kafka.TIMESTAMP_CREATE_TIME and ts[1] < self.timestampToSeek)) :
                 continue
             
             if ts[0] == confluent_kafka.TIMESTAMP_CREATE_TIME and ts[1] >= self.timestampToBreakAt:
@@ -96,7 +99,8 @@ class DataReader():
                 
             # We got all data for this partition, pause it
             if ts[0] == confluent_kafka.TIMESTAMP_CREATE_TIME and ts[1] >= self.currentTimebin + self.windowSize:
-                logging.warning('Pause partition {} for {} ts={}.({}, {})'.format(msg.partition(), msg.topic(), ts[1], self.currentTimebin, self.currentTimebin+self.windowSize))
+                logging.warning('Pause partition {} for {} ts={}.({}, {}, {} msg processed)'.format(
+                    msg.partition(), msg.topic(), ts[1], self.currentTimebin, self.currentTimebin+self.windowSize, nb_messages))
                 tp = TopicPartition(msg.topic(), msg.partition(), msg.offset())
                 self.consumer.pause([tp])
                 self.partitionPaused.add(tp) 
@@ -104,7 +108,8 @@ class DataReader():
                     self.queuedMessages.append(val)
                     continue
                 else:
-                    logging.warning('Resume partitions {} ({}, {}).'.format(self.consumer.assignment(), self.currentTimebin, self.currentTimebin+self.windowSize))
+                    logging.warning('Resume partitions {} ({}, {}).'.format(
+                        self.consumer.assignment(), self.currentTimebin, self.currentTimebin+self.windowSize))
                     # Send queued messages and resume consumer
                     self.currentTimebin += self.windowSize
                     for qval in self.queuedMessages:
