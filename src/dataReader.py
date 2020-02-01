@@ -24,7 +24,7 @@ class DataReader():
         if collectionType == 'ribs':
             self.timeout = 600
         else:
-            self.timeout = 0
+            self.timeout = None
 
         self.windowSize = windowSize * 1000
         self.dataCallback = dataCallback 
@@ -74,7 +74,7 @@ class DataReader():
 
             if msg is None:
                 logging.warn('Timeout! (poll done with {}s)'.format(self.timeout))
-                continue
+                break
 
             if msg.error():
                 logging.error("Consumer error: {}".format(msg.error()))
