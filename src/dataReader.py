@@ -42,7 +42,8 @@ class DataReader():
 
         self.consumer = Consumer({
             'bootstrap.servers': 'kafka1:9092, kafka2:9092, kafka3:9092',
-            'group.id': 'ihr_ashegemony_reader_'+self.collectionType,
+            'group.id': 'ihr_ashegemony_reader_{}_{}'.format(
+                self.collectionType, self.currentTimebin),
             'max.poll.interval.ms': 900*1000,
             'enable.auto.commit': 'false',
         })
