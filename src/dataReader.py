@@ -73,8 +73,8 @@ class DataReader():
             msg = self.consumer.poll(self.timeout)
 
             if msg is None:
-                logging.warn('Timeout')
-                break
+                logging.warn('Timeout! (poll done with {}s)'.format(self.timeout))
+                continue
 
             if msg.error():
                 logging.error("Consumer error: {}".format(msg.error()))
