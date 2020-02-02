@@ -3,6 +3,7 @@ from confluent_kafka import Consumer, TopicPartition, KafkaError
 import confluent_kafka 
 import msgpack
 import logging
+import time
 
 class DataReader():
     '''Read BGP data from Kafka cluster. 
@@ -24,7 +25,7 @@ class DataReader():
         if collectionType == 'ribs':
             self.timeout = 600
         else:
-            self.timeout = None
+            self.timeout = windowSize
 
         self.windowSize = windowSize * 1000
         self.dataCallback = dataCallback 
@@ -65,16 +66,43 @@ class DataReader():
         logging.warning("{}, start: {}, end: {}, {} partitions".format(
             self.topics, self.timestampToSeek, self.timestampToBreakAt, self.partitionTotal))
 
+    def resume(self):
+        '''Resume reading paused partitions'''
+
+        logging.warning('Resume partitions {} ({}, {}).'.format(
+            self.partitionPaused, self.currentTimebin, self.currentTimebin+self.windowSize))
+        # Send queued messages and resume consumer
+        self.currentTimebin += self.windowSize
+        for qval in self.queuedMessages:
+            self.dataCallback(qval)
+        logging.warning('pushed queued messages')
+
+        # Initialisation for a new time bin
+        tps = list(self.partitionPaused)
+        self.consumer.commit(offsets=tps)
+        self.queuedMessages = []
+        self.consumer.resume(tps)
+        self.partitionPaused = set()
+
+
     def start(self):
         '''Consume data for all collectors by chunk of length windowSize'''
 
         logging.info('enter in consumer loop')
         nb_messages = 0
         while True:
+
             msg = self.consumer.poll(self.timeout)
 
             if msg is None:
-                logging.warn('Timeout! (poll done with {}s)'.format(self.timeout))
+                logging.warn('Timeout! ({}s)'.format(self.timeout))
+
+                # Make sure the consumer has assigned partitions
+                if self.partitionTotal == 0:
+                    logging.warn('Kafka consumer not yet assigned?')
+                    time.sleep(10)
+                    continue
+
                 break
 
             if msg.error():
@@ -94,7 +122,11 @@ class DataReader():
                 self.consumer.pause([TopicPartition(msg.topic(), msg.partition())])
                 self.partitionStopped += 1
                 if self.partitionStopped < self.partitionTotal:
-                    continue
+                    if self.partitionStopped+len(self.partitionPaused) < self.partitionTotal:
+                        continue
+                    else:
+                        self.resume()
+                        continue
                 else:
                     break
                 
@@ -105,25 +137,11 @@ class DataReader():
                 tp = TopicPartition(msg.topic(), msg.partition(), msg.offset())
                 self.consumer.pause([tp])
                 self.partitionPaused.add(tp) 
-                if len(self.partitionPaused) < self.partitionTotal:
+                if len(self.partitionPaused)+self.partitionStopped < self.partitionTotal:
                     self.queuedMessages.append(val)
                     continue
                 else:
-                    logging.warning('Resume partitions {} ({}, {}).'.format(
-                        self.consumer.assignment(), self.currentTimebin, self.currentTimebin+self.windowSize))
-                    # Send queued messages and resume consumer
-                    self.currentTimebin += self.windowSize
-                    for qval in self.queuedMessages:
-                        self.dataCallback(qval)
-                    logging.warning('pushed queued messages')
-
-                    # Initialisation for a new time bin
-                    tps = list(self.partitionPaused)
-                    self.consumer.commit(offsets=tps)
-                    self.queuedMessages = []
-                    self.consumer.resume(tps)
-                    self.partitionPaused = set()
-                    self.partitionStopped = 0
+                    self.resume()
 
             self.dataCallback(val)
 
