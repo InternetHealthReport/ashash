@@ -30,7 +30,7 @@ class pathCounter(threading.Thread):
     def __init__(
             self, starttime, endtime, announceQueue, countQueue, ribQueue, 
             spatialResolution=1, af=4, timeWindow=900, 
-            collectors=[ "route-views.linx", "route-views2", "rrc00", "rrc10"],
+            collectors=[ "route-views.linx", "route-views2", "rrc10", "rrc00"],
             includedPeers=[], excludedPeers=[], includedOrigins=[], excludedOrigins=[], 
             onlyFullFeed=True, txtFile=None, prefixWeight=None, useKafka=0):
 
@@ -95,13 +95,13 @@ class pathCounter(threading.Thread):
                 continue
             self.peersPerASN[list(a)[0]].append(p)
 
-        logging.debug("(pathCounter) %s " % self.peersASN)
+        logging.info("(pathCounter) %s " % self.peersASN)
         self.cleanUnusedCounts()
 
         logging.info("Reading UPDATE files...")
         if self.startts != self.endts:
             if self.useKafka:
-                self.consumeupdates(liveMode=False)
+                self.consumeupdates()
             else:
                 self.readupdates()
         else:
@@ -131,8 +131,8 @@ class pathCounter(threading.Thread):
                 nbPrefixes[peer] += 1
 
         res = set([peer for peer, nbPfx in nbPrefixes.iteritems() if nbPfx>len(nodes)*threshold])
-        logging.debug("(pathCounter) Using %s peers out of %s (threshold=%s)" % (len(res), len(nbPrefixes), threshold))
-        logging.debug("(pathCounter) Number of prefixes: %s" % (len(nodes)))
+        logging.info("(pathCounter) Using %s peers out of %s (threshold=%s)" % (len(res), len(nbPrefixes), threshold))
+        logging.info("(pathCounter) Number of prefixes: %s" % (len(nodes)))
 
         return res
 
@@ -173,13 +173,13 @@ class pathCounter(threading.Thread):
 
 
     def slideTimeWindow(self,ts):
-        logging.debug("(pathCounter) sliding window... (ts=%s)" % self.ts)
-        self.ts = ts
+        logging.info("(pathCounter) sliding window... (ts=%s)" % self.ts)
+        self.ts = int(ts/self.timeWindow)*self.timeWindow
 
         self.countQueue.put( (self.ts, self.peersPerASN, self.counter) )
         self.countQueue.join()
         
-        logging.debug("(pathCounter) window slided (ts=%s)" % self.ts)
+        logging.info("(pathCounter) window slided (ts=%s)" % self.ts)
 
 
     def incTotalCount(self, count, peerip, origAS, zAS):
@@ -288,6 +288,9 @@ class pathCounter(threading.Thread):
         elements = data["elements"]
 
         for element in elements:
+            if element['type'] != "A":
+                continue
+
             zOrig = element["peer_address"]
 
             if  zOrig not in self.peers:
@@ -316,7 +319,7 @@ class pathCounter(threading.Thread):
 
             elif self.ts > msgTs:
                 #Old update, ignore this to update the graph
-                logging.warn("Ignoring old update (peer IP: %s, timestamp: %s, current time bin: %s): %s" % (zOrig, zDt, self.ts, (elem.type, zAS, elem.fields)))
+                logging.warn("Ignoring old update (peer IP: %s, timestamp: %s, current time bin: %s): %s" % (zOrig, zDt, self.ts, (element['type'], zAS, element['fields'])))
                 continue
 
             node = self.rtree.search_exact(zPfx)
@@ -444,22 +447,22 @@ class pathCounter(threading.Thread):
                     self.incTotalCount(count,  zOrig, origAS, zAS)
 
     def consumerib(self):
-        readers = []
-        for c in self.collectors:
-            readers.append(DataReader(c, self.startts, False, collectionType="ribs"))
+        reader = DataReader(
+                self.collectors, 'ribs', self.af, 
+                self.startts-3600, self.startts+3600, 3600*2,
+                self.updateCountsRIB
+                )
 
-        for reader in readers:
-            reader.attach(self)
-            reader.start()
+        reader.start()
 
-    def consumeupdates(self,liveMode):
-        readers = []
-        for c in self.collectors:
-            readers.append(DataReader(c, self.startts, liveMode, collectionType="updates"))
-
-        for reader in readers:
-            reader.attach(self)
-            reader.start()
+    def consumeupdates(self):
+        reader = DataReader(
+                self.collectors, 'updates', self.af, 
+                self.startts, self.endts, self.timeWindow,
+                self.updateCountsUpdates
+                )
+                    
+        reader.start()
 
     def readrib(self):
         stream = None
