@@ -37,6 +37,7 @@ class saverPostgresql(object):
         self.currenttime = starttime
         self.af = af
         self.dataHege = [] 
+        self.hegemonyCone = defaultdict(int)
         self.cpmgr = None
 
         local_port = 5432
@@ -113,6 +114,19 @@ class saverPostgresql(object):
             
             # Hegemony values to copy in the database
             self.dataHege.extend([(self.currenttime, int(scope), int(k), float(v), int(self.af)) for k,v in hege.iteritems() if validASN(k) and v!=0 ])
+        
+            # Compute Hegemony cone size
+            scope = int(scope)
+            for k,v in hege.iteritems():
+                if validASN(k) and v!=0 :
+                    asn = int(k)
+                    inc = 1
+                    if scope == 0 or asn == scope:
+                        # ASes with empty cone are still stored
+                        inc = 0
+
+                    self.hegemonyCone[asn] += inc
+
 
     def commit(self):
         logging.warn("psql: start copy")
@@ -121,9 +135,17 @@ class saverPostgresql(object):
         logging.warn("psql: end copy")
         # Populate the table for AS hegemony cone
         logging.warn("psql: adding hegemony cone")
-        self.cursor.execute("INSERT INTO ihr_hegemonycone (timebin, conesize, af, asn_id) SELECT timebin, count(distinct originasn_id), af, asn_id FROM ihr_hegemony WHERE timebin=%s and asn_id!=originasn_id and originasn_id!=0 GROUP BY timebin, af, asn_id;", (self.currenttime,))
+        data = [(self.currenttime, conesize, self.af, asn) 
+                for asn, conesize in self.hegemonyCone.items() ]
+        insert_query = 'INSERT INTO ihr_hegemonycone (timebin, conesize, af, asn_id) values %s'
+        psycopg2.extras.execute_values (
+            self.cursor, insert_query, data, template=None, page_size=100
+        )
+
+        # self.cursor.execute("INSERT INTO ihr_hegemonycone (timebin, conesize, af, asn_id) SELECT timebin, count(distinct originasn_id), af, asn_id FROM ihr_hegemony WHERE timebin=%s and asn_id!=originasn_id and originasn_id!=0 GROUP BY timebin, af, asn_id;", (self.currenttime,))
         self.conn.commit()
         self.dataHege = []
+        self.hegemonyCone = defaultdict(int)
         logging.warn("psql: end hegemony cone")
 
 
