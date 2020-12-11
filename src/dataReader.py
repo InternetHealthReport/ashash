@@ -25,7 +25,7 @@ class DataReader():
         if collectionType == 'ribs':
             self.timeout = 600
         else:
-            self.timeout = windowSize
+            self.timeout = windowSize*2
 
         self.windowSize = windowSize * 1000
         self.dataCallback = dataCallback 
@@ -95,11 +95,11 @@ class DataReader():
             msg = self.consumer.poll(self.timeout)
 
             if msg is None:
-                logging.warn('Timeout! ({}s)'.format(self.timeout))
+                logging.warning('Timeout! ({}s)'.format(self.timeout))
 
                 # Make sure the consumer has assigned partitions
                 if self.partitionTotal == 0:
-                    logging.warn('Kafka consumer not yet assigned?')
+                    logging.warning('Kafka consumer not yet assigned?')
                     time.sleep(10)
                     continue
 
