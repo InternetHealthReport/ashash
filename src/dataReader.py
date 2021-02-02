@@ -24,10 +24,11 @@ class DataReader():
         self.af = af
         if collectionType == 'ribs':
             self.timeout = 600
+            self.windowSize = 3600*2*1000
         else:
             self.timeout = windowSize*2
+            self.windowSize = windowSize * 1000
 
-        self.windowSize = windowSize * 1000
         self.dataCallback = dataCallback 
         self.queuedMessages = []
 
