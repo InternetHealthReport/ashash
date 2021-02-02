@@ -20,12 +20,18 @@ class DataReader():
         self.collectors = collectorsName
         self.startTS = startTS
         self.endTS = endTS
+        self.timestampToSeek = self.startTS * 1000
+        self.currentTimebin = self.startTS 
+        #self.currentTimebin = int(self.startTS/windowSize)*windowSize * 1000
+        self.timestampToBreakAt = self.endTS * 1000
+
         self.collectionType = collectionType
         self.af = af
         if collectionType == 'ribs':
             self.timeout = 600
         else:
             self.timeout = windowSize*2
+            self.currentTimebin = int(self.startTS/windowSize)*windowSize * 1000
 
         self.windowSize = windowSize * 1000
 
@@ -35,10 +41,6 @@ class DataReader():
         self.topics = ['_'.join(['ihr', 'bgp', collector, collectionType])
                 for collector in self.collectors]
 
-        #self.timestampToSeek = self.startTS * 1000
-        self.currentTimebin = int(self.startTS/windowSize)*windowSize * 1000
-        self.timestampToSeek = self.currentTimebin
-        self.timestampToBreakAt = self.endTS * 1000
         self.partitionPaused = set()
         self.partitionStopped = 0
         self.partitionTotal = 0
