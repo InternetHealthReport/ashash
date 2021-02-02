@@ -24,10 +24,10 @@ class DataReader():
         self.af = af
         if collectionType == 'ribs':
             self.timeout = 600
-            self.windowSize = 3600*2*1000
         else:
             self.timeout = windowSize*2
-            self.windowSize = windowSize * 1000
+
+        self.windowSize = windowSize * 1000
 
         self.dataCallback = dataCallback 
         self.queuedMessages = []
@@ -35,8 +35,9 @@ class DataReader():
         self.topics = ['_'.join(['ihr', 'bgp', collector, collectionType])
                 for collector in self.collectors]
 
-        self.timestampToSeek = self.startTS * 1000
+        #self.timestampToSeek = self.startTS * 1000
         self.currentTimebin = int(self.startTS/windowSize)*windowSize * 1000
+        self.timestampToSeek = self.currentTimebin
         self.timestampToBreakAt = self.endTS * 1000
         self.partitionPaused = set()
         self.partitionStopped = 0
