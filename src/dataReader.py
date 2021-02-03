@@ -21,7 +21,7 @@ class DataReader():
         self.startTS = startTS
         self.endTS = endTS
         self.timestampToSeek = self.startTS * 1000
-        self.currentTimebin = self.startTS 
+        self.currentTimebin = self.timestampToSeek
         #self.currentTimebin = int(self.startTS/windowSize)*windowSize * 1000
         self.timestampToBreakAt = self.endTS * 1000
 
