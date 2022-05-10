@@ -1,7 +1,10 @@
 # from kafka import KafkaConsumer
-from confluent_kafka import Consumer, TopicPartition, KafkaError
-import confluent_kafka 
-import msgpack
+try:
+    from confluent_kafka import Consumer, TopicPartition, KafkaError
+    import confluent_kafka 
+    import msgpack
+except ImportError:
+    pass
 import logging
 import time
 
