@@ -12,6 +12,10 @@ def asHegemonyMetric( param ):
         #TODO handle set origins
         return None
 
+    if len(peersPerASN) == 0:
+        # no peer information: abort
+        return None
+
     # # logging.debug("(AS hegemony) computing hegemony for graph %s" % asn)
     asHege = defaultdict(float)
     # peersTotalCount = {p:float(counter["total"][p]) for p in peers if counter["total"][p]>0}

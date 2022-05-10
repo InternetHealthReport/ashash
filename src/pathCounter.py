@@ -90,6 +90,17 @@ class pathCounter(threading.Thread):
                 continue
             self.peersPerASN[list(a)[0]].append(p)
 
+        # No peer selected
+        if len(self.peersPerASN) == 0:
+            # Force peers
+            if len(self.peers) == 0:
+                self.peers = self.findFullFeeds(0)
+
+            self.peersASN = {p:self.peersASN[p] for p in self.peers} 
+            for p, a in self.peersASN.iteritems():
+                self.peersPerASN[list(a)[0]].append(p)
+
+
         logging.debug("(pathCounter) %s " % self.peersASN)
         self.cleanUnusedCounts()
 

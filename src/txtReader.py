@@ -2,7 +2,7 @@ import csv
 
 
 class BGPRecord():
-    def __init__(self, ts, peerIP, peerAS, prefix, aspath, community):
+    def __init__(self, ts, peerIP, peerAS, prefix, aspath):
         self.ts = int(ts)
         self.peer_address = peerIP.strip()
         self.peer_asn = peerAS.strip()
@@ -25,7 +25,7 @@ class txtReader():
         self.running = True
         try:
             row = self.reader.next()
-            return BGPRecord(row[1], row[3], row[4], row[5], row[6], row[11] )
+            return BGPRecord(row[1], row[3], row[4], row[5], row[6] )
 
         except StopIteration:
             return None
