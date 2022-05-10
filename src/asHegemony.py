@@ -10,6 +10,7 @@ def asHegemonyMetric( param ):
 
     if scope.startswith("{"):
         #TODO handle set origins
+        # could at least accept sets with only one AS!
         return None
 
     if len(peersPerASN) == 0:
@@ -38,9 +39,8 @@ def asHegemonyMetric( param ):
         else:
             hege = float(stats.trim_mean(allScores, alpha))
 
-        # # Ignore ASN with hegemony = 0
-        # This is useful for having a smaller db file, so it should be done
-        # there
+        # Ignore ASN with hegemony = 0: This is useful for having a smaller db 
+        # file, so it should be done there
 
         asHege[asn] = hege
 

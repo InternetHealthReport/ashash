@@ -13,6 +13,15 @@ from multiprocessing import JoinableQueue as mpQueue
 from multiprocessing import Process
 from cStringIO import StringIO
 
+def validASN(asn):
+    if isinstance(asn,int):
+        return True
+    try:
+        a = int(asn)
+    except ValueError:
+        return False
+
+    return True
 
 class saverPostgresql(object):
 
@@ -28,6 +37,7 @@ class saverPostgresql(object):
         self.currenttime = starttime
         self.af = af
         self.dataHege = [] 
+        self.hegemonyCone = defaultdict(int)
         self.cpmgr = None
 
         local_port = 5432
@@ -46,7 +56,7 @@ class saverPostgresql(object):
 
             conn_string = "host='127.0.0.1' port='%s' dbname='%s'" % (local_port, dbname)
         else:
-            conn_string = "dbname='%s'" % dbname
+            conn_string = "host='127.0.0.1' dbname='%s'" % dbname
 
         self.conn = psycopg2.connect(conn_string)
         columns=("timebin", "originasn_id", "asn_id", "hege", "af")
@@ -93,7 +103,8 @@ class saverPostgresql(object):
                 self.cursor.execute("INSERT INTO ihr_asn(number, name, tartiflette, disco, ashash) select %s, %s, FALSE, FALSE, TRUE WHERE NOT EXISTS ( SELECT number FROM ihr_asn WHERE number = %s)", (scope, self.asNames["AS"+str(scope)], scope))
                 self.cursor.execute("UPDATE ihr_asn SET ashash = TRUE where number = %s", (int(scope),))
             insertQuery = "INSERT INTO ihr_asn(number, name, tartiflette, disco, ashash) select %s, %s, FALSE, FALSE, TRUE WHERE NOT EXISTS ( SELECT number FROM ihr_asn WHERE number = %s)"
-            param = [(asn, self.asNames["AS"+str(asn)], asn) for asn in hege.keys() if  (isinstance(asn, int) or not asn.startswith("{") ) and int(asn) not in self.asns]
+            param = [(asn, self.asNames["AS"+str(asn)], asn) for asn in hege.keys() if  validASN(asn) and int(asn) not in self.asns]
+
             #toremove?
             for asn, _, _ in param:
                 self.asns.add(int(asn))
@@ -102,7 +113,20 @@ class saverPostgresql(object):
                 psycopg2.extras.execute_batch(self.cursor, insertQuery, param, page_size=100)
             
             # Hegemony values to copy in the database
-            self.dataHege.extend([(self.currenttime, int(scope), int(k), float(v), int(self.af)) for k,v in hege.iteritems() if (isinstance(k,int) or not k.startswith("{")) and v!=0 ])
+            self.dataHege.extend([(self.currenttime, int(scope), int(k), float(v), int(self.af)) for k,v in hege.iteritems() if validASN(k) and v!=0 ])
+        
+            # Compute Hegemony cone size
+            scope = int(scope)
+            for k,v in hege.iteritems():
+                if validASN(k) and v!=0 :
+                    asn = int(k)
+                    inc = 1
+                    if scope == 0 or asn == scope:
+                        # ASes with empty cone are still stored
+                        inc = 0
+
+                    self.hegemonyCone[asn] += inc
+
 
     def commit(self):
         logging.warn("psql: start copy")
@@ -111,9 +135,17 @@ class saverPostgresql(object):
         logging.warn("psql: end copy")
         # Populate the table for AS hegemony cone
         logging.warn("psql: adding hegemony cone")
-        self.cursor.execute("INSERT INTO ihr_hegemonycone (timebin, conesize, af, asn_id) SELECT timebin, count(distinct originasn_id), af, asn_id FROM ihr_hegemony WHERE timebin=%s and asn_id!=originasn_id and originasn_id!=0 GROUP BY timebin, af, asn_id;", (self.currenttime,))
+        data = [(self.currenttime, conesize, self.af, asn) 
+                for asn, conesize in self.hegemonyCone.items() ]
+        insert_query = 'INSERT INTO ihr_hegemonycone (timebin, conesize, af, asn_id) values %s'
+        psycopg2.extras.execute_values (
+            self.cursor, insert_query, data, template=None, page_size=100
+        )
+
+        # self.cursor.execute("INSERT INTO ihr_hegemonycone (timebin, conesize, af, asn_id) SELECT timebin, count(distinct originasn_id), af, asn_id FROM ihr_hegemony WHERE timebin=%s and asn_id!=originasn_id and originasn_id!=0 GROUP BY timebin, af, asn_id;", (self.currenttime,))
         self.conn.commit()
         self.dataHege = []
+        self.hegemonyCone = defaultdict(int)
         logging.warn("psql: end hegemony cone")
 
 
